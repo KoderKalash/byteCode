@@ -99,8 +99,9 @@ export default function Home() {
                         <div className="w-3 h-3 rounded-full bg-green-500"></div>
                       </div>
                       <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                        {language || "Select Language"} • main.
-                        {language === "python" ? "py" : language === "javascript" ? "js" : "txt"}
+                        {/* {language || "Select Language"}  */}
+                        main.
+                        {language === "python" ? "py" : language === "java" ? "java" : "cpp"}
                       </span>
                     </div>
                     <div className="text-xs text-gray-500 dark:text-gray-400">Lines: {code.split("\n").length}</div>

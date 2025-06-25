@@ -17,7 +17,7 @@ export default function OutputBox({ output }) {
           </div>
         </div>
 
-        {/* Content */}
+        {/* Output */}
         <div className="p-4 h-48 overflow-auto">
           <pre className="text-sm text-gray-100 font-mono leading-relaxed whitespace-pre-wrap">
             {output || <span className="text-gray-500 italic">Output will be here...</span>}

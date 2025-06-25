@@ -5,45 +5,50 @@ import { Sun, Moon } from "lucide-react"
 
 export default function ThemeToggle() {
   const [dark, setDark] = useState(true)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    // Check for saved theme preference or default to dark
     const savedTheme = localStorage.getItem("theme")
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
     const initialDark = savedTheme ? savedTheme === "dark" : prefersDark
 
     setDark(initialDark)
-    document.documentElement.className = initialDark
-      ? "dark transition-colors duration-300"
-      : "light transition-colors duration-300"
+    updateHtmlClass(initialDark)
+    setMounted(true)
   }, [])
 
   useEffect(() => {
-    // Update document class and save preference
-    document.documentElement.className = dark
-      ? "dark transition-colors duration-300"
-      : "light transition-colors duration-300"
+    if (!mounted) return
+    updateHtmlClass(dark)
     localStorage.setItem("theme", dark ? "dark" : "light")
   }, [dark])
+
+  function updateHtmlClass(isDark) {
+    const html = document.documentElement
+    html.classList.remove("dark", "light")
+    html.classList.add(isDark ? "dark" : "light")
+  }
+
+  if (!mounted) return null
 
   return (
     <div className="relative inline-flex items-center">
       {/* Theme Toggle Switch */}
       <button
         onClick={() => setDark(!dark)}
-        className="relative inline-flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 group focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+        className="w-full sm:w-auto relative flex flex-col sm:flex-row items-center sm:gap-3 gap-2 px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 group focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
       >
         {/* Icon Container */}
-        <div className="relative flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 dark:from-amber-400 dark:to-orange-500 shadow-md transition-all duration-300 group-hover:scale-110">
+        <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 dark:from-amber-400 dark:to-orange-500 shadow-md transition-all duration-300 group-hover:scale-110">
           {dark ? (
-            <Moon className="h-4 w-4 text-white transition-transform duration-300 group-hover:rotate-12" />
+            <Moon className="h-5 w-5 text-white transition-transform duration-300 group-hover:rotate-12" />
           ) : (
-            <Sun className="h-4 w-4 text-white transition-transform duration-300 group-hover:rotate-180" />
+            <Sun className="h-5 w-5 text-white transition-transform duration-300 group-hover:rotate-180" />
           )}
         </div>
 
         {/* Text and Status */}
-        <div className="flex flex-col items-start">
+        <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
           <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 transition-colors duration-300">
             {dark ? "Dark Mode" : "Light Mode"}
           </span>
@@ -57,7 +62,7 @@ export default function ThemeToggle() {
       </button>
 
       {/* Theme Indicator Dot */}
-      <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-gradient-to-r from-green-400 to-emerald-500 shadow-sm animate-pulse"></div>
+      <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-gradient-to-r from-green-400 to-emerald-500 shadow-sm animate-pulse" />
     </div>
   )
 }
