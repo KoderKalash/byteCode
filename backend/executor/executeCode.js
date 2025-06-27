@@ -9,10 +9,21 @@ const runners = {
 };
 
 module.exports = async (language, code) => {
-  const runner = runners[language];
-  if (!runner) throw new Error("Unsupported language");
+  try {
+    const runner = runners[language]
+    if (!runner) throw new Error("Unsupported language")
 
-  const filePath = await runner.createFile(code);
-  const output = await runner.run(filePath);
-  return output;
-};
+    console.log(`[EXEC] Using runner for language: ${language}`)
+
+    const filePath = await runner.createFile(code)
+    console.log(`[EXEC] File created at: ${filePath}`)
+
+    const output = await runner.run(filePath)
+    console.log(`[EXEC] Output received`)
+    
+    return output
+  } catch (err) {
+    console.error(`[EXEC ERROR]:`, err.message)
+    throw new Error("Execution Failed")
+  }
+}

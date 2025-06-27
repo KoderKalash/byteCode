@@ -10,10 +10,25 @@ module.exports = {
 
   run: (filename) => {
     return new Promise((resolve, reject) => {
-      const command = `docker run --rm -v ${process.cwd()}:/app -w /app bytecode-java`;
+      // Ensure path is compatible with Docker (e.g., handle Windows)
+      const dir = process.cwd().replace(/\\/g, "/");
+
+      // This image will compile and run Main.java
+      const command = `docker run --rm -v "${dir}:/app" -w /app bytecode-java sh -c "javac ${filename} && java Main"`;
+
+      console.log("[DOCKER RUN]", command);
+
       exec(command, (err, stdout, stderr) => {
-        if (err) return reject(stderr);
-        resolve(stdout);
+        if (err) {
+          console.error("[DOCKER ERROR]:", stderr || err.message);
+          return reject(stderr || err.message);
+        }
+
+        if (stderr) {
+          console.warn("[DOCKER STDERR]:", stderr);
+        }
+
+        resolve(stdout.trim());
       });
     });
   },
