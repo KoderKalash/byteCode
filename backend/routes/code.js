@@ -1,7 +1,7 @@
 const express = require("express")
 const router = express.Router()
 const validateInput = require("../utils/validateInput")
-const executeCode = require("../executor/execute")
+const executeCode = require("../executor/executeCode")
 
 router.post("/" , async (req,res)=> {
     console.log("Request body: ", req.body)
