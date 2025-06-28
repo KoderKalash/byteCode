@@ -9,25 +9,25 @@ module.exports = {
   },
 
   run: (filename) => {
-    return new Promise((resolve, reject) => {
-      const dir = process.cwd().replace(/\\/g, "/")
-      const command = `docker run --rm -v "${dir}:/app" -w /app bytecode-python python ${filename}`
+  return new Promise((resolve, reject) => {
+    const dir = process.cwd().replace(/\\/g, "/")
+    const command = `docker run --rm -v "${dir}:/app" -w /app bytecode-python python ${filename}`
 
-      console.log("[DOCKER RUN]", command)
+    console.log("[DOCKER RUN]", command)
 
-      exec(command, (err, stdout, stderr) => {
-        if (err) {
-          console.error("[DOCKER ERROR]:", err.message || stderr)
-          return reject(stderr || err.message)
-        }
+    exec(command, (err, stdout, stderr) => {
+      if (err) {
+        console.error("[DOCKER ERROR]:", err.message || stderr)
+        return reject(stderr || err.message)
+      }
 
-        if (stderr) {
-          console.warn("[DOCKER STDERR]:", stderr)
-        }
+      if (stderr) {
+        console.warn("[DOCKER STDERR]:", stderr)
+      }
 
-        resolve(stdout.trim())
-      })
+      resolve(stdout.trim())
     })
-  }
+  })
+}
   ,
 };

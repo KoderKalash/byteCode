@@ -1,18 +1,22 @@
-import java.util.Scanner;
+#include <iostream>
 
-public class Main {
-    public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
+int main() {
+    int rows;
 
-        System.out.print("Enter your name: ");
-        String name = scanner.nextLine();
+    // Get the number of rows from the user
+    std::cout << "Enter the number of rows for the triangle: ";
+    std::cin >> rows;
 
-        System.out.print("Enter number of tickets: ");
-        int tickets = scanner.nextInt();
-
-        System.out.println("Hello, " + name + "!");
-        System.out.println("You have booked " + tickets + " ticket(s).");
-
-        scanner.close();
+    // Outer loop for rows
+    for (int i = 1; i <= rows; ++i) {
+        // Inner loop for printing asterisks in each row
+        for (int j = 1; j <= i; ++j) {
+            std::cout << "* ";
+        }
+        // Move to the next line after printing each row
+        std::cout << std::endl;
     }
+
+    return 0;
+}
 }
