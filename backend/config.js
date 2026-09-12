@@ -18,6 +18,9 @@ module.exports = {
   // Largest program we will accept, in characters.
   maxCodeLength: int(process.env.MAX_CODE_LENGTH, 64 * 1024),
 
+  // Largest stdin payload we will accept, in characters.
+  maxStdinLength: int(process.env.MAX_STDIN_LENGTH, 64 * 1024),
+
   sandbox: {
     // Wall-clock budget per phase, in milliseconds.
     compileTimeoutMs: int(process.env.COMPILE_TIMEOUT_MS, 15000),

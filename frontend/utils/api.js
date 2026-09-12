@@ -2,13 +2,13 @@
 // not a constant, so the app can be deployed somewhere other than localhost.
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/$/, "")
 
-export async function runCode({ language, code }) {
+export async function runCode({ language, code, stdin }) {
   let res
   try {
     res = await fetch(`${API_BASE}/run-code`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ language, code }),
+      body: JSON.stringify({ language, code, stdin }),
     })
   } catch (err) {
     return { ok: false, output: `Could not reach the ByteCode API at ${API_BASE}.` }

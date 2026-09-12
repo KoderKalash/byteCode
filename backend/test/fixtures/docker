@@ -37,6 +37,18 @@ case "${FAKE_DOCKER_MODE:-ok}" in
     cat "$workdir"/main.py 2>/dev/null || cat "$workdir"/main.cpp 2>/dev/null
     exit 0
     ;;
+  echo_stdin)
+    # Read stdin and print it back, so the test can prove input was delivered.
+    [ "$is_compile" = "1" ] && exit 0
+    cat
+    exit 0
+    ;;
+  ignore_stdin)
+    # A program that never reads its input: the write side sees EPIPE.
+    [ "$is_compile" = "1" ] && exit 0
+    echo "did not read input"
+    exit 0
+    ;;
   compile_fail)
     if [ "$is_compile" = "1" ]; then
       echo "main.cpp:3:14: error: expected ';' before '}' token" >&2

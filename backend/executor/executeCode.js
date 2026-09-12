@@ -39,7 +39,7 @@ function timeoutMessage(stage, timeoutMs) {
     : `Execution timed out after ${seconds}s. Check for an infinite loop.`
 }
 
-async function executeCode(language, code) {
+async function executeCode(language, code, stdin) {
   const spec = languages.get(language)
   if (!spec) throw new ExecutionError(`Unsupported language: ${language}`, { stage: "sandbox" })
 
@@ -79,6 +79,8 @@ async function executeCode(language, code) {
       argv: spec.run,
       workDir,
       timeoutMs: config.sandbox.runTimeoutMs,
+      // Only the run phase gets stdin; a compiler has no use for it.
+      stdin,
     })
 
     if (executed.timedOut) {

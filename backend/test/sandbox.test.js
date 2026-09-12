@@ -33,6 +33,12 @@ function useDocker(mode) {
   return () => (fs.existsSync(logFile) ? fs.readFileSync(logFile, "utf8") : "")
 }
 
+function dockerInvocations() {
+  return (fs.existsSync(logFile) ? fs.readFileSync(logFile, "utf8") : "")
+    .split("\n")
+    .filter(Boolean)
+}
+
 function run(body) {
   return fetch(`${baseUrl}/run-code`, {
     method: "POST",
@@ -202,4 +208,81 @@ test("a missing sandbox image is reported as a sandbox problem", async () => {
   const res = await run({ language: "python", code: "print('hi')" })
   assert.equal(res.status, 503)
   assert.doesNotMatch((await res.json()).output, /bytecode-python/)
+})
+
+test("stdin is delivered to the program", async () => {
+  useDocker("echo_stdin")
+  const res = await run({ language: "python", code: "print(input())", stdin: "42\n" })
+  const data = await res.json()
+
+  assert.equal(res.status, 200)
+  assert.equal(data.ok, true)
+  assert.equal(data.stdout, "42\n")
+})
+
+test("stdin reaches the run phase but not the compiler", async () => {
+  useDocker("echo_stdin")
+  await run({ language: "cpp", code: "int main(){}", stdin: "7\n" })
+
+  const [compile, execute] = dockerInvocations()
+  const tokens = (line) => line.split(/\s+/)
+
+  assert.ok(compile.includes("g++"), `first invocation should compile: ${compile}`)
+  assert.ok(
+    !tokens(compile).includes("--interactive"),
+    `compiler should not be given stdin: ${compile}`
+  )
+  assert.ok(
+    tokens(execute).includes("--interactive"),
+    `run phase should be given stdin: ${execute}`
+  )
+})
+
+test("no stdin means the container's stdin stays closed", async () => {
+  useDocker("ok")
+  await run({ language: "python", code: "print(1)" })
+
+  const [execute] = dockerInvocations()
+  assert.ok(
+    !execute.split(/\s+/).includes("--interactive"),
+    `--interactive should be omitted when there is no input: ${execute}`
+  )
+})
+
+test("empty stdin is treated as no input", async () => {
+  useDocker("ok")
+  const res = await run({ language: "python", code: "print(1)", stdin: "" })
+
+  assert.equal(res.status, 200)
+  assert.ok(!dockerInvocations()[0].split(/\s+/).includes("--interactive"))
+})
+
+test("a program that ignores its input does not fail with EPIPE", async () => {
+  useDocker("ignore_stdin")
+  const res = await run({ language: "python", code: "print(1)", stdin: "x".repeat(70) })
+  const data = await res.json()
+
+  assert.equal(data.ok, true)
+  assert.match(data.stdout, /did not read input/)
+})
+
+test("oversized stdin is rejected before a container starts", async () => {
+  useDocker("ok")
+  const res = await run({
+    language: "python",
+    code: "print(1)",
+    stdin: "x".repeat(64 * 1024 + 1),
+  })
+
+  assert.equal(res.status, 400)
+  assert.match((await res.json()).error, /Input exceeds/)
+  assert.deepEqual(dockerInvocations(), [], "no container should have been started")
+})
+
+test("non-string stdin is rejected", async () => {
+  useDocker("ok")
+  const res = await run({ language: "python", code: "print(1)", stdin: 42 })
+
+  assert.equal(res.status, 400)
+  assert.match((await res.json()).error, /Input must be a string/)
 })

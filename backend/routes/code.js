@@ -7,13 +7,13 @@ const validateInput = require("../utils/validateInput")
 const router = express.Router()
 
 router.post("/", async (req, res) => {
-  const { language, code } = req.body || {}
+  const { language, code, stdin } = req.body || {}
 
-  const invalid = validateInput(language, code)
+  const invalid = validateInput(language, code, stdin)
   if (invalid) return res.status(400).json({ ok: false, error: invalid, output: invalid })
 
   try {
-    const result = await executeCode(language, code)
+    const result = await executeCode(language, code, stdin)
     const failed = result.exitCode !== 0
 
     return res.json({

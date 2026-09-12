@@ -5,6 +5,7 @@ import Editor from "@monaco-editor/react"
 import LanguageSelector from "@/components/LanguageSelector"
 import RunButton from "@/components/RunButton"
 import OutputBox from "@/components/OutputBox"
+import InputBox from "@/components/InputBox"
 import ThemeToggle from "@/components/ThemeToggle"
 import { runCode } from "@/utils/api"
 import useIsDark from "@/hooks/useIsDark"
@@ -18,12 +19,13 @@ export default function Home() {
   // Default to the language the selector actually displays. Starting at ""
   // left the dropdown showing C++ while the request sent no language at all.
   const [language, setLanguage] = useState(languages[0].id)
+  const [stdin, setStdin] = useState("")
   const [output, setOutput] = useState("")
   const isDark = useIsDark()
 
   const handleRun = async () => {
     setOutput("Running...")
-    const result = await runCode({ language, code })
+    const result = await runCode({ language, code, stdin })
 
     let text = result.output || "No output."
     if (result.truncated) text += "\n\n[output truncated]"
@@ -141,18 +143,20 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Output Section */}
+            {/* Input / Output Section */}
             <div className="space-y-4">
               <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
                 <Terminal className="h-5 w-5" />
-                Output
+                Input &amp; Output
               </h2>
 
-              <div className="sticky top-8">
+              <div className="sticky top-8 space-y-4">
+                <InputBox stdin={stdin} setStdin={setStdin} />
+
                 <OutputBox output={output} />
 
                 {/* Stats Card */}
-                <div className="mt-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl shadow-lg border border-white/20 dark:border-gray-700/50 p-4 transition-all duration-300">
+                <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl shadow-lg border border-white/20 dark:border-gray-700/50 p-4 transition-all duration-300">
                   <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Session Stats</h3>
                   <div className="grid grid-cols-2 gap-4 text-center">
                     <div className="p-3 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg">

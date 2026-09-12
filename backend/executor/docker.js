@@ -21,14 +21,23 @@ const SANDBOX_DIR = "/sandbox"
  *  - --user (non-root)   : the program does not run as root inside the container.
  *  - only `workDir` is mounted, and it holds exactly one submission — the backend
  *    source tree is no longer reachable from inside the sandbox.
+ *
+ * `stdin`, when given, is piped to the process. Without it the container's stdin
+ * is closed, so a program that reads input gets EOF immediately instead of
+ * blocking until the timeout.
  */
-function spawnDocker({ image, argv, workDir, timeoutMs }) {
+function spawnDocker({ image, argv, workDir, timeoutMs, stdin }) {
   const { sandbox } = config
   const containerName = `bytecode-${crypto.randomBytes(8).toString("hex")}`
+
+  const hasStdin = typeof stdin === "string" && stdin.length > 0
 
   const dockerArgs = [
     "run",
     "--rm",
+    // --interactive keeps the container's stdin open so we can write to it.
+    // Only add it when there is something to deliver.
+    ...(hasStdin ? ["--interactive"] : []),
     "--name", containerName,
     "--network", "none",
     "--memory", sandbox.memory,
@@ -47,7 +56,16 @@ function spawnDocker({ image, argv, workDir, timeoutMs }) {
   ]
 
   return new Promise((resolve, reject) => {
-    const child = spawn("docker", dockerArgs, { stdio: ["ignore", "pipe", "pipe"] })
+    const child = spawn("docker", dockerArgs, {
+      stdio: [hasStdin ? "pipe" : "ignore", "pipe", "pipe"],
+    })
+
+    if (hasStdin) {
+      // A program that ignores its input closes the pipe early, which surfaces
+      // here as EPIPE. That is the program's choice, not an execution failure.
+      child.stdin.on("error", () => {})
+      child.stdin.end(stdin)
+    }
 
     const captured = { stdout: "", stderr: "" }
     let truncated = false
@@ -92,6 +110,7 @@ function spawnDocker({ image, argv, workDir, timeoutMs }) {
       // the deadline — waiting for it would keep the caller hanging for exactly
       // as long as the program we just decided to stop.
       finish(null)
+      child.stdin?.destroy()
       child.stdout.destroy()
       child.stderr.destroy()
       child.unref()

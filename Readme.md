@@ -13,6 +13,7 @@ doesn't build.
 
 - ✨ Monaco code editor, following the light/dark toggle
 - 🧠 **Python**, **C++**, and **Java**
+- ⌨️ **stdin support** — feed input to your program
 - 🐳 One throwaway container per submission — no shared state between users
 - 🧾 Real compiler and runtime errors, not a generic "failed" message
 - ⏱️ Wall-clock timeouts, memory/CPU/PID caps, and no network inside the sandbox
@@ -122,6 +123,7 @@ Backend (`backend/.env`, see `.env.example`):
 | `SANDBOX_CPUS` | `0.5` | Per-container CPU cap |
 | `SANDBOX_PIDS_LIMIT` | `128` | Per-container process cap |
 | `MAX_CODE_LENGTH` | `65536` | Largest accepted submission, in characters |
+| `MAX_STDIN_LENGTH` | `65536` | Largest accepted stdin payload, in characters |
 | `MAX_OUTPUT_BYTES` | `65536` | Output is truncated past this |
 
 Frontend (`frontend/.env.local`):
@@ -137,8 +139,12 @@ Frontend (`frontend/.env.local`):
 ### `POST /run-code`
 
 ```json
-{ "language": "python", "code": "print('hi')" }
+{ "language": "python", "code": "print(input())", "stdin": "hi\n" }
 ```
+
+`stdin` is optional. When it is absent or empty the container's stdin is closed,
+so a program that reads input gets EOF immediately rather than blocking until
+the timeout. It is delivered to the run phase only — a compiler has no use for it.
 
 ```json
 {
@@ -177,7 +183,13 @@ The suite runs without a Docker daemon: it puts a stub `docker` CLI on `PATH`
 (`test/fixtures/docker`) and asserts on how the real one *would* be invoked —
 the hardening flags, that only the temp dir is mounted, that it's cleaned up,
 that concurrent submissions stay isolated, that compiler output is passed
-through, and that a hanging program is killed and times out promptly.
+through, that stdin reaches the program but not the compiler, and that a hanging
+program is killed and times out promptly.
+
+CI (`.github/workflows/ci.yml`) runs these on every pull request, alongside a
+frontend lint/build and a job that builds the sandbox images — the last one is
+what actually verifies the pinned base images, since the unit suite stubs Docker
+out on purpose.
 
 ---
 
@@ -204,7 +216,6 @@ Register it in `backend/executor/language/index.js`, add a
 
 ## 🗺️ Roadmap
 
-- [ ] **stdin support** — the biggest functional gap today
 - [ ] Rate limiting per IP
 - [ ] Shareable snippet links
 - [ ] A warm container pool to cut cold-start latency
