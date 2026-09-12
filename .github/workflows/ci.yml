@@ -87,6 +87,10 @@ jobs:
           # Keep the infinite-loop check quick.
           RUN_TIMEOUT_MS: 5000
           COMPILE_TIMEOUT_MS: 30000
+          # The smoke test asserts sandbox behaviour, so keep throttling out of
+          # its way; the limiter and the gate have their own unit suites.
+          RATE_LIMIT_MAX: 100000
+          MAX_CONCURRENT_EXECUTIONS: 8
         run: |
           npm start > /tmp/bytecode-api.log 2>&1 &
           echo $! > /tmp/bytecode-api.pid

@@ -21,6 +21,30 @@ module.exports = {
   // Largest stdin payload we will accept, in characters.
   maxStdinLength: int(process.env.MAX_STDIN_LENGTH, 64 * 1024),
 
+  // Per-IP request limit on /run-code.
+  rateLimit: {
+    windowMs: int(process.env.RATE_LIMIT_WINDOW_MS, 60 * 1000),
+    max: int(process.env.RATE_LIMIT_MAX, 30),
+
+    // Behind a proxy or load balancer, req.ip is the proxy's address unless
+    // Express is told how many hops to trust — which would put every client in
+    // one bucket. Set this to the number of proxies in front of the app.
+    // Never set it to `true`: a client could then spoof X-Forwarded-For and
+    // get a fresh bucket per request. Default 0 = no proxy, trust the socket.
+    trustProxyHops: int(process.env.TRUST_PROXY_HOPS, 0),
+  },
+
+  // A per-IP request limit does not bound resource use: 30 requests a minute
+  // can still be 30 *simultaneous* containers, each holding the memory and CPU
+  // reserved below. This caps how many run at once, regardless of who asked.
+  concurrency: {
+    max: int(process.env.MAX_CONCURRENT_EXECUTIONS, 4),
+    // Requests beyond `max` wait in line; beyond that they are turned away
+    // immediately rather than piling up behind a full queue.
+    maxQueue: int(process.env.MAX_QUEUED_EXECUTIONS, 8),
+    queueTimeoutMs: int(process.env.QUEUE_TIMEOUT_MS, 15000),
+  },
+
   sandbox: {
     // Wall-clock budget per phase, in milliseconds.
     compileTimeoutMs: int(process.env.COMPILE_TIMEOUT_MS, 15000),

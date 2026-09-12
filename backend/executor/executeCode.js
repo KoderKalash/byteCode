@@ -5,6 +5,7 @@ const path = require("path")
 const config = require("../config")
 const ExecutionError = require("./ExecutionError")
 const { runInContainer } = require("./docker")
+const { gate } = require("./concurrency")
 const languages = require("./language")
 
 /**
@@ -42,6 +43,9 @@ function timeoutMessage(stage, timeoutMs) {
 async function executeCode(language, code, stdin) {
   const spec = languages.get(language)
   if (!spec) throw new ExecutionError(`Unsupported language: ${language}`, { stage: "sandbox" })
+
+  // Claim a slot before doing any work, so a refusal costs nothing.
+  const release = await gate.acquire()
 
   const workDir = await createWorkDir()
   const startedAt = Date.now()
@@ -102,6 +106,9 @@ async function executeCode(language, code, stdin) {
     }
   } finally {
     await removeWorkDir(workDir)
+    // Release only after cleanup, so the slot's resources are actually free
+    // before the next execution claims it.
+    release()
   }
 }
 

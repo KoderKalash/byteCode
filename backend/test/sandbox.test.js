@@ -11,6 +11,10 @@ process.env.PATH = `${FIXTURES}${path.delimiter}${process.env.PATH}`
 process.env.RUN_TIMEOUT_MS = "600"
 process.env.COMPILE_TIMEOUT_MS = "600"
 process.env.MAX_OUTPUT_BYTES = "1024"
+// This file tests execution, not throttling: keep the per-IP limit and the
+// concurrency gate out of the way. They have their own suite in ratelimit.test.js.
+process.env.RATE_LIMIT_MAX = "100000"
+process.env.MAX_CONCURRENT_EXECUTIONS = "32"
 
 const app = require("../app")
 

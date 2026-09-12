@@ -63,6 +63,13 @@ case "${FAKE_DOCKER_MODE:-ok}" in
     echo "Traceback (most recent call last): ZeroDivisionError" >&2
     exit 1
     ;;
+  slow)
+    # Occupies an execution slot long enough for requests to overlap.
+    [ "$is_compile" = "1" ] && exit 0
+    sleep 1
+    echo "SLOW"
+    exit 0
+    ;;
   hang)
     [ "$is_compile" = "1" ] && exit 0
     sleep 30

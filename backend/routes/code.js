@@ -45,6 +45,12 @@ router.post("/", async (req, res) => {
         })
       }
 
+      // At capacity: a real answer, and the client should retry.
+      if (err.stage === "capacity") {
+        res.set("Retry-After", "5")
+        return res.status(503).json({ ok: false, error: err.message, output: err.message })
+      }
+
       // Sandbox problems are ours.
       console.error(`[API] sandbox error: ${err.message}`)
       return res.status(503).json({ ok: false, error: err.message, output: err.message })

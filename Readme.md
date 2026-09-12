@@ -17,6 +17,7 @@ doesn't build.
 - 🐳 One throwaway container per submission — no shared state between users
 - 🧾 Real compiler and runtime errors, not a generic "failed" message
 - ⏱️ Wall-clock timeouts, memory/CPU/PID caps, and no network inside the sandbox
+- 🚦 Per-IP rate limiting and a global concurrency cap
 - 🔥 Responsive UI (Tailwind + Next.js)
 
 ---
@@ -69,6 +70,38 @@ compile error is reported as a compile error with the compiler's own output.
 
 On timeout the container is stopped by name with `docker kill` — killing the
 Docker CLI alone would leave it running.
+
+---
+
+## 🚦 Throttling
+
+Two separate limits, because they protect against different things.
+
+**Per-IP rate limit** (`RATE_LIMIT_MAX` per `RATE_LIMIT_WINDOW_MS`) bounds how
+*often* one client may ask. Exceeding it returns `429` with `RateLimit` and
+`Retry-After` headers so a client can back off without guessing.
+
+**Concurrency cap** (`MAX_CONCURRENT_EXECUTIONS`) bounds how many containers run
+*at once*. This is the one that actually caps resource use: a 30-per-minute rate
+limit still permits 30 simultaneous runs, which at the default `SANDBOX_MEMORY`
+and `SANDBOX_CPUS` would reserve 7.5 GB and 15 CPUs from a single compliant
+client. Requests past the cap wait in a short queue
+(`MAX_QUEUED_EXECUTIONS`, `QUEUE_TIMEOUT_MS`); past that they get `503` with
+`Retry-After` immediately, rather than piling up behind a queue that cannot
+drain in time.
+
+`GET /health` reports live gate state (`active`, `queued`, `max`) and is
+deliberately **not** rate limited, so monitoring never trips the limiter.
+
+### Behind a proxy
+
+`req.ip` is the proxy's address unless Express is told how many hops to trust,
+which would put every client in one rate-limit bucket. Set `TRUST_PROXY_HOPS` to
+the number of proxies in front of the app.
+
+Do **not** set it to `true`: a client could then spoof `X-Forwarded-For` and mint
+a fresh bucket per request, which is worse than no limit at all. Only an
+explicit hop count is honoured.
 
 ---
 
@@ -125,6 +158,12 @@ Backend (`backend/.env`, see `.env.example`):
 | `MAX_CODE_LENGTH` | `65536` | Largest accepted submission, in characters |
 | `MAX_STDIN_LENGTH` | `65536` | Largest accepted stdin payload, in characters |
 | `MAX_OUTPUT_BYTES` | `65536` | Output is truncated past this |
+| `RATE_LIMIT_WINDOW_MS` | `60000` | Rate-limit window |
+| `RATE_LIMIT_MAX` | `30` | Requests per window, per IP |
+| `TRUST_PROXY_HOPS` | `0` | Proxies in front of the app (never `true`) |
+| `MAX_CONCURRENT_EXECUTIONS` | `4` | Containers running at once |
+| `MAX_QUEUED_EXECUTIONS` | `8` | Requests allowed to wait for a slot |
+| `QUEUE_TIMEOUT_MS` | `15000` | How long a queued request waits before `503` |
 
 Frontend (`frontend/.env.local`):
 
@@ -161,13 +200,23 @@ the timeout. It is delivered to the run phase only — a compiler has no use for
 ```
 
 A compile error, a runtime error, or a timeout is a **200** with `ok: false` —
-they're valid answers to a valid request. `400` means the payload was rejected,
-`503` means the sandbox itself is unavailable.
+they're valid answers to a valid request.
+
+| Status | Meaning |
+|---|---|
+| `200` | Ran. `ok: false` for a compile error, runtime error or timeout |
+| `400` | Payload rejected (bad language, missing or oversized code/stdin) |
+| `429` | Per-IP rate limit exceeded |
+| `503` | At capacity (`Retry-After: 5`), or the sandbox itself is unavailable |
 
 ### `GET /health`
 
 ```json
-{ "status": "ok", "languages": ["python", "cpp", "java"] }
+{
+  "status": "ok",
+  "languages": ["python", "cpp", "java"],
+  "executions": { "active": 0, "queued": 0, "max": 4 }
+}
 ```
 
 ---
@@ -178,6 +227,8 @@ they're valid answers to a valid request. `400` means the payload was rejected,
 cd backend
 npm test
 ```
+
+32 tests, covering execution, throttling and the concurrency gate.
 
 The suite runs without a Docker daemon: it puts a stub `docker` CLI on `PATH`
 (`test/fixtures/docker`) and asserts on how the real one *would* be invoked —
@@ -233,6 +284,5 @@ Register it in `backend/executor/language/index.js`, add a
 
 ## 🗺️ Roadmap
 
-- [ ] Rate limiting per IP
 - [ ] Shareable snippet links
 - [ ] A warm container pool to cut cold-start latency
