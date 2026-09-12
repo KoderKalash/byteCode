@@ -1,10 +1,23 @@
-const supportedLanguages = ["cpp","java","python"]
+const config = require("../config")
+const languages = require("../executor/language")
 
-function validateInput(language,code){
-    if(!language || !code) return "Missing language or code"
-    if(!supportedLanguages.includes(language)) return "Unsupported Langugage"
-    if(typeof code !== "string") return "Code must be a string"
-    return null //then valid 
+/**
+ * Returns an error string, or null when the payload is acceptable.
+ */
+function validateInput(language, code) {
+  if (typeof language !== "string" || !language) return "Missing language"
+  if (typeof code !== "string") return "Code must be a string"
+  if (!code.trim()) return "Missing code"
+
+  if (!languages.ids.includes(language)) {
+    return `Unsupported language: ${language}. Supported: ${languages.ids.join(", ")}`
+  }
+
+  if (code.length > config.maxCodeLength) {
+    return `Code exceeds the ${config.maxCodeLength} character limit`
+  }
+
+  return null
 }
 
 module.exports = validateInput

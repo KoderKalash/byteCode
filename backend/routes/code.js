@@ -1,21 +1,59 @@
 const express = require("express")
-const router = express.Router()
-const validateInput = require("../utils/validateInput")
+
 const executeCode = require("../executor/executeCode")
+const ExecutionError = require("../executor/ExecutionError")
+const validateInput = require("../utils/validateInput")
 
-router.post("/" , async (req,res)=> {
-    console.log("Request body: ", req.body)
-    const {language,code} = req.body
+const router = express.Router()
 
-    const error = validateInput(language,code)
-    if(error) return res.status(400).json({error})
+router.post("/", async (req, res) => {
+  const { language, code } = req.body || {}
 
-        try{
-            const output = await executeCode(language,code)
-            res.json({output}) //sending result to frontend
-        }catch(err) {
-            res.status(500).json({error:err.message || "Execution Failed"})
-        }
+  const invalid = validateInput(language, code)
+  if (invalid) return res.status(400).json({ ok: false, error: invalid, output: invalid })
+
+  try {
+    const result = await executeCode(language, code)
+    const failed = result.exitCode !== 0
+
+    return res.json({
+      ok: !failed,
+      // `output` is what the editor prints: stdout on success, diagnostics on failure.
+      output: failed ? result.stderr.trim() || result.stdout : result.stdout,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: result.exitCode,
+      stage: result.stage,
+      timedOut: result.timedOut,
+      truncated: result.truncated,
+      durationMs: result.durationMs,
+    })
+  } catch (err) {
+    if (err instanceof ExecutionError) {
+      // A compile error or a timeout is a valid answer to a valid request, not a
+      // server fault — return 200 and let the UI render the real message.
+      if (err.stage === "compile" || err.stage === "run") {
+        return res.json({
+          ok: false,
+          output: err.message,
+          stdout: "",
+          stderr: err.message,
+          exitCode: err.exitCode,
+          stage: err.stage,
+          timedOut: err.timedOut,
+          truncated: false,
+        })
+      }
+
+      // Sandbox problems are ours.
+      console.error(`[API] sandbox error: ${err.message}`)
+      return res.status(503).json({ ok: false, error: err.message, output: err.message })
+    }
+
+    console.error("[API] unexpected error:", err)
+    const message = "Internal server error while running your code."
+    return res.status(500).json({ ok: false, error: message, output: message })
+  }
 })
 
 module.exports = router

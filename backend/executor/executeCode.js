@@ -1,29 +1,106 @@
-const fs = require("fs");
-const path = require("path");
-const { exec } = require("child_process");
+const fs = require("fs/promises")
+const os = require("os")
+const path = require("path")
 
-const runners = {
-  cpp: require("./language/cpp"),
-  java: require("./language/java"),
-  python: require("./language/python"),
-};
+const config = require("../config")
+const ExecutionError = require("./ExecutionError")
+const { runInContainer } = require("./docker")
+const languages = require("./language")
 
-module.exports = async (language, code) => {
+/**
+ * Create an isolated working directory for a single submission.
+ *
+ * Previously every runner wrote a fixed filename (main.py / Main.java / main.cpp)
+ * into the backend's own working directory, so two concurrent requests overwrote
+ * each other's source — one user could execute and see another user's code. Each
+ * request now gets its own directory outside the repo, and it is deleted afterwards.
+ */
+async function createWorkDir() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "bytecode-"))
+  // The sandbox runs as a non-root uid that does not own this directory, so it
+  // needs group/other write access to emit compiler output.
+  await fs.chmod(dir, 0o777)
+  return dir
+}
+
+async function removeWorkDir(dir) {
   try {
-    const runner = runners[language]
-    if (!runner) throw new Error("Unsupported language")
-
-    console.log(`[EXEC] Using runner for language: ${language}`)
-
-    const filePath = await runner.createFile(code)
-    console.log(`[EXEC] File created at: ${filePath}`)
-
-    const output = await runner.run(filePath)
-    console.log(`[EXEC] Output received`)
-    
-    return output
+    await fs.rm(dir, { recursive: true, force: true })
   } catch (err) {
-    console.error(`[EXEC ERROR]:`, err.message)
-    throw new Error("Execution Failed")
+    // Never fail a response because cleanup lost a race.
+    console.error(`[EXEC] cleanup failed for ${dir}: ${err.message}`)
   }
 }
+
+function timeoutMessage(stage, timeoutMs) {
+  const seconds = (timeoutMs / 1000).toFixed(0)
+  return stage === "compile"
+    ? `Compilation timed out after ${seconds}s.`
+    : `Execution timed out after ${seconds}s. Check for an infinite loop.`
+}
+
+async function executeCode(language, code) {
+  const spec = languages.get(language)
+  if (!spec) throw new ExecutionError(`Unsupported language: ${language}`, { stage: "sandbox" })
+
+  const workDir = await createWorkDir()
+  const startedAt = Date.now()
+
+  try {
+    await fs.writeFile(path.join(workDir, spec.filename), code, { mode: 0o644 })
+
+    if (spec.compile) {
+      const compiled = await runInContainer({
+        image: spec.image,
+        argv: spec.compile,
+        workDir,
+        timeoutMs: config.sandbox.compileTimeoutMs,
+      })
+
+      if (compiled.timedOut) {
+        throw new ExecutionError(timeoutMessage("compile", config.sandbox.compileTimeoutMs), {
+          stage: "compile",
+          timedOut: true,
+        })
+      }
+
+      if (compiled.exitCode !== 0) {
+        // Hand back the compiler's actual diagnostics — this is the message the
+        // user needs, and it used to be discarded.
+        throw new ExecutionError(compiled.stderr.trim() || "Compilation failed.", {
+          stage: "compile",
+          exitCode: compiled.exitCode,
+        })
+      }
+    }
+
+    const executed = await runInContainer({
+      image: spec.image,
+      argv: spec.run,
+      workDir,
+      timeoutMs: config.sandbox.runTimeoutMs,
+    })
+
+    if (executed.timedOut) {
+      throw new ExecutionError(timeoutMessage("run", config.sandbox.runTimeoutMs), {
+        stage: "run",
+        timedOut: true,
+        // Partial output is still useful when a program loops after printing.
+      })
+    }
+
+    return {
+      stdout: executed.stdout,
+      stderr: executed.stderr,
+      exitCode: executed.exitCode,
+      truncated: executed.truncated,
+      stage: "run",
+      timedOut: false,
+      durationMs: Date.now() - startedAt,
+    }
+  } finally {
+    await removeWorkDir(workDir)
+  }
+}
+
+module.exports = executeCode

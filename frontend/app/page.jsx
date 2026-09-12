@@ -6,25 +6,29 @@ import LanguageSelector from "@/components/LanguageSelector"
 import RunButton from "@/components/RunButton"
 import OutputBox from "@/components/OutputBox"
 import ThemeToggle from "@/components/ThemeToggle"
+import { runCode } from "@/utils/api"
+import useIsDark from "@/hooks/useIsDark"
+import languages from "@/constants/languages"
 import { Code2, Zap, Terminal } from "lucide-react"
+
+const FILENAMES = { python: "main.py", cpp: "main.cpp", java: "Main.java" }
 
 export default function Home() {
   const [code, setCode] = useState("")
-  const [language, setLanguage] = useState("")
+  // Default to the language the selector actually displays. Starting at ""
+  // left the dropdown showing C++ while the request sent no language at all.
+  const [language, setLanguage] = useState(languages[0].id)
   const [output, setOutput] = useState("")
+  const isDark = useIsDark()
 
   const handleRun = async () => {
-    try {
-      const res = await fetch("http://localhost:5000/run-code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ language, code }),
-      })
-      const data = await res.json()
-      setOutput(data.output || data.error || "No output.")
-    } catch (err) {
-      setOutput("Error connecting to backend.")
-    }
+    setOutput("Running...")
+    const result = await runCode({ language, code })
+
+    let text = result.output || "No output."
+    if (result.truncated) text += "\n\n[output truncated]"
+    if (!result.ok && result.stage === "compile") text = `Compile error:\n${text}`
+    setOutput(text)
   }
 
   return (
@@ -100,8 +104,7 @@ export default function Home() {
                       </div>
                       <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
                         {/* {language || "Select Language"}  */}
-                        main.
-                        {language === "python" ? "py" : language === "java" ? "java" : "cpp"}
+                        {FILENAMES[language] ?? "main"}
                       </span>
                     </div>
                     <div className="text-xs text-gray-500 dark:text-gray-400">Lines: {code.split("\n").length}</div>
@@ -112,7 +115,7 @@ export default function Home() {
                     <Editor
                       height="450px"
                       language={language}
-                      theme="vs-dark"
+                      theme={isDark ? "vs-dark" : "vs"}
                       value={code}
                       onChange={(value) => setCode(value || "")}
                       options={{

@@ -1,12 +1,8 @@
-# Base image with g++
-FROM gcc:latest
+# Pinned: "latest" silently changes the compiler version under your users.
+FROM gcc:13
 
-# Create working directory
-WORKDIR /app
+# No COPY of the project. The submission is bind-mounted into /sandbox at run
+# time by the executor, so this image holds only the toolchain.
+WORKDIR /sandbox
 
-# Copy all files into container
-COPY . .
-
-# Compile and run code (done at runtime via exec command)
-# So we don't compile here in Dockerfile
-CMD [ "sh", "-c", "g++ main.cpp -o main && ./main" ]
+# The command is supplied per-invocation by executor/language/cpp.js.
