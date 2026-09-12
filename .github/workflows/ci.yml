@@ -57,14 +57,48 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-  sandbox-images:
-    name: Sandbox images build
+  smoke:
+    name: End-to-end smoke test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # The unit suite deliberately stubs Docker out, so this job is what proves
-      # the pinned base images still exist and the Dockerfiles are valid.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install
+        working-directory: backend
+        run: npm ci
+
+      # The unit suite stubs Docker out, so this job is the only thing that
+      # proves the pinned base images exist, that each toolchain actually
+      # compiles and runs a program under --read-only as an unprivileged uid,
+      # and that a runaway program is killed without leaking a container.
       - name: Build sandbox images
         working-directory: backend
         run: sh docker/build.sh
+
+      - name: Start API
+        working-directory: backend
+        env:
+          # Keep the infinite-loop check quick.
+          RUN_TIMEOUT_MS: 5000
+          COMPILE_TIMEOUT_MS: 30000
+        run: |
+          npm start > /tmp/bytecode-api.log 2>&1 &
+          echo $! > /tmp/bytecode-api.pid
+
+      - name: Smoke test
+        working-directory: backend
+        run: npm run smoke
+
+      - name: API log
+        if: always()
+        run: cat /tmp/bytecode-api.log
+
+      - name: Stop API
+        if: always()
+        run: kill "$(cat /tmp/bytecode-api.pid)" || true

@@ -186,10 +186,27 @@ that concurrent submissions stay isolated, that compiler output is passed
 through, that stdin reaches the program but not the compiler, and that a hanging
 program is killed and times out promptly.
 
-CI (`.github/workflows/ci.yml`) runs these on every pull request, alongside a
-frontend lint/build and a job that builds the sandbox images — the last one is
-what actually verifies the pinned base images, since the unit suite stubs Docker
-out on purpose.
+### End-to-end smoke test
+
+Because the unit suite stubs Docker out, there is a separate smoke test that
+runs against a **real** daemon:
+
+```bash
+npm run build:images
+npm start &
+npm run smoke
+```
+
+It asserts what the stub cannot: that each toolchain compiles and runs a program
+under `--read-only` as an unprivileged uid, that stdin is delivered in all three
+languages, that a compile error comes back with the compiler's own diagnostics,
+that the sandbox has no network access and cannot write outside its work
+directory, and that an infinite loop times out **without leaving a container
+running**.
+
+CI (`.github/workflows/ci.yml`) runs all of this on every pull request: the unit
+suite, a frontend lint/build, and the smoke test — which builds the images
+first, so it also verifies the pinned base tags still exist.
 
 ---
 
