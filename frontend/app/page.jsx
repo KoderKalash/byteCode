@@ -12,7 +12,7 @@ import CodeFallback from "@/components/CodeFallback"
 import ShareButton from "@/components/ShareButton"
 import { runCode, createSnippet, fetchSnippet } from "@/utils/api"
 import useIsDark from "@/hooks/useIsDark"
-import languages, { DEFAULT_LANGUAGE } from "@/constants/languages"
+import languages, { DEFAULT_LANGUAGE, STARTERS, isUntouched } from "@/constants/languages"
 
 loader.config({ paths: { vs: "/monaco/vs" } })
 
@@ -48,7 +48,7 @@ const THEMES = {
 }
 
 export default function Home() {
-  const [code, setCode] = useState("")
+  const [code, setCode] = useState(STARTERS[DEFAULT_LANGUAGE])
   const [language, setLanguage] = useState(DEFAULT_LANGUAGE)
   const [stdin, setStdin] = useState("")
   const [result, setResult] = useState(null)
@@ -82,6 +82,16 @@ export default function Home() {
       clearTimeout(deadline)
     }
   }, [editorReady])
+
+  // Swapping the starter on a language change is a convenience, not a licence
+  // to throw away work: it only happens while the editor still holds a starter
+  // (or nothing at all). Once the visitor has typed, the code is theirs and
+  // switching language leaves it alone.
+  const handleLanguageChange = (next) => {
+    if (next === language) return
+    setLanguage(next)
+    if (isUntouched(code)) setCode(STARTERS[next])
+  }
 
   const canRun = code.trim().length > 0 && !isRunning
 
@@ -164,7 +174,7 @@ export default function Home() {
             BYTECODE
           </div>
 
-          <LanguageSelector language={language} setLanguage={setLanguage} />
+          <LanguageSelector language={language} setLanguage={handleLanguageChange} />
 
           <div className="flex-grow" />
 
