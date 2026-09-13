@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref instead of paying for both.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend tests (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 24 is Active LTS; 22 is still widely installed. Node 20 went
+        # end-of-life on 2026-03-24 and is deliberately not tested.
+        node: ["22", "24"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install
+        working-directory: backend
+        run: npm ci
+
+      # The suite puts a stub docker CLI on PATH, so it needs no Docker daemon.
+      # See backend/test/fixtures/docker.
+      - name: Test
+        working-directory: backend
+        run: npm test
+
+  frontend:
+    name: Frontend lint and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npx next lint
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+  smoke:
+    name: End-to-end smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install
+        working-directory: backend
+        run: npm ci
+
+      # The unit suite stubs Docker out, so this job is the only thing that
+      # proves the pinned base images exist, that each toolchain actually
+      # compiles and runs a program under --read-only as an unprivileged uid,
+      # and that a runaway program is killed without leaking a container.
+      - name: Build sandbox images
+        working-directory: backend
+        run: sh docker/build.sh
+
+      - name: Start API
+        working-directory: backend
+        env:
+          # Keep the infinite-loop check quick.
+          RUN_TIMEOUT_MS: 5000
+          COMPILE_TIMEOUT_MS: 30000
+          # The smoke test asserts sandbox behaviour, so keep throttling out of
+          # its way; the limiter and the gate have their own unit suites.
+          RATE_LIMIT_MAX: 100000
+          MAX_CONCURRENT_EXECUTIONS: 8
+        run: |
+          npm start > /tmp/bytecode-api.log 2>&1 &
+          echo $! > /tmp/bytecode-api.pid
+
+      - name: Smoke test
+        working-directory: backend
+        run: npm run smoke
+
+      - name: API log
+        if: always()
+        run: cat /tmp/bytecode-api.log
+
+      - name: Stop API
+        if: always()
+        run: kill "$(cat /tmp/bytecode-api.pid)" || true

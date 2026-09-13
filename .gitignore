@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Sandbox scratch (per-request temp dirs are created outside the repo,
+# but never let stray compiler output get committed again)
+main
+main.exe
+main.out
+*.class
+*.o

@@ -1,11 +1,8 @@
-# Use official Python image
-FROM python:3.10
+# Pinned: "latest" silently changes the language version under your users.
+FROM python:3.11-slim
 
-# Set working directory
-WORKDIR /app
+# No COPY of the project. The submission is bind-mounted into /sandbox at run
+# time by the executor, so this image holds only the toolchain.
+WORKDIR /sandbox
 
-# Copy all files
-COPY . .
-
-# Run Python script
-CMD [ "python", "main.py" ]
+# The command is supplied per-invocation by executor/language/python.js.

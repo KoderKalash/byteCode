@@ -1,19 +1,22 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "ByteCode API - sandboxed multi-language code execution",
   "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node app.js",
+    "dev": "node --watch app.js",
+    "build:images": "sh docker/build.sh",
+    "test": "node --test test/*.test.js",
+    "smoke": "node test/smoke.mjs"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "body-parser": "^2.2.0",
     "cors": "^2.8.5",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.7.0"
   }
 }

@@ -1,180 +1,201 @@
 "use client"
 
-import { useState } from "react"
-import Editor from "@monaco-editor/react"
+import { useState, useEffect, useRef } from "react"
+import Editor, { loader } from "@monaco-editor/react"
+
 import LanguageSelector from "@/components/LanguageSelector"
 import RunButton from "@/components/RunButton"
 import OutputBox from "@/components/OutputBox"
+import InputBox from "@/components/InputBox"
 import ThemeToggle from "@/components/ThemeToggle"
-import { Code2, Zap, Terminal } from "lucide-react"
+import CodeFallback from "@/components/CodeFallback"
+import { runCode } from "@/utils/api"
+import useIsDark from "@/hooks/useIsDark"
+import languages, { DEFAULT_LANGUAGE } from "@/constants/languages"
+
+loader.config({ paths: { vs: "/monaco/vs" } })
+
+const FILENAMES = { python: "main.py", cpp: "main.cpp", java: "Main.java" }
+
+// Monaco ships no theme in this palette, so define both from the design tokens.
+// Monaco needs literal hex — it parses these itself, CSS variables don't reach it.
+const THEMES = {
+  "bytecode-light": {
+    base: "vs",
+    colors: { "editor.background": "#f7f6f2", "editor.foreground": "#121212", "editorLineNumber.foreground": "#9a9a9a", "editorLineNumber.activeForeground": "#121212", "editor.selectionBackground": "#d4f00055", "editorCursor.foreground": "#121212", "editor.lineHighlightBackground": "#eceae4" },
+    rules: [
+      { token: "comment", foreground: "8a8a8a", fontStyle: "italic" },
+      { token: "string", foreground: "3f7d20" },
+      { token: "number", foreground: "b03a1a" },
+      { token: "keyword", foreground: "b03a1a", fontStyle: "bold" },
+      { token: "type", foreground: "1b5e8f" },
+      { token: "identifier", foreground: "121212" },
+    ],
+  },
+  "bytecode-dark": {
+    base: "vs-dark",
+    colors: { "editor.background": "#262626", "editor.foreground": "#f2f0eb", "editorLineNumber.foreground": "#6b6b6b", "editorLineNumber.activeForeground": "#f2f0eb", "editor.selectionBackground": "#d4f00033", "editorCursor.foreground": "#d4f000", "editor.lineHighlightBackground": "#2e2e2e" },
+    rules: [
+      { token: "comment", foreground: "7a7a7a", fontStyle: "italic" },
+      { token: "string", foreground: "a8d84e" },
+      { token: "number", foreground: "ff8a5c" },
+      { token: "keyword", foreground: "ff8a5c", fontStyle: "bold" },
+      { token: "type", foreground: "6fb4e8" },
+      { token: "identifier", foreground: "f2f0eb" },
+    ],
+  },
+}
 
 export default function Home() {
   const [code, setCode] = useState("")
-  const [language, setLanguage] = useState("")
-  const [output, setOutput] = useState("")
+  const [language, setLanguage] = useState(DEFAULT_LANGUAGE)
+  const [stdin, setStdin] = useState("")
+  const [result, setResult] = useState(null)
+  const [isRunning, setIsRunning] = useState(false)
+  const [editorReady, setEditorReady] = useState(false)
+  const [editorFailed, setEditorFailed] = useState(false)
+  const isDark = useIsDark()
+
+  // Monaco is served from this app, but a failed load should still leave a
+  // usable page rather than a permanent "Loading…".
+  //
+  // Two paths, because they catch different failures: `loader.init()` rejects
+  // when the loader script fails outright (a 404, a CSP refusal), while the
+  // deadline covers a request that stalls instead of failing — a hung network
+  // or a CDN that accepts the connection and never answers, which is the case
+  // that otherwise leaves "Loading…" on screen indefinitely.
+  useEffect(() => {
+    if (editorReady) return undefined
+
+    let cancelled = false
+    const fail = () => {
+      if (!cancelled) setEditorFailed(true)
+    }
+
+    loader.init().catch(fail)
+    const deadline = setTimeout(fail, 10000)
+
+    return () => {
+      cancelled = true
+      clearTimeout(deadline)
+    }
+  }, [editorReady])
+
+  const canRun = code.trim().length > 0 && !isRunning
 
   const handleRun = async () => {
+    if (!canRun) return
+    setIsRunning(true)
     try {
-      const res = await fetch("http://localhost:5000/run-code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ language, code }),
-      })
-      const data = await res.json()
-      setOutput(data.output || data.error || "No output.")
-    } catch (err) {
-      setOutput("Error connecting to backend.")
+      setResult(await runCode({ language, code, stdin }))
+    } finally {
+      setIsRunning(false)
     }
   }
 
+  // Ctrl/Cmd+Enter runs. The ref keeps the listener pointed at the current
+  // handler without rebinding on every keystroke.
+  const runRef = useRef(handleRun)
+  runRef.current = handleRun
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault()
+        runRef.current()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [])
+
+  const lineCount = code ? code.split("\n").length : 0
+
   return (
-    <main className="min-h-screen relative overflow-hidden">
-      {/* Background Elements */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-gray-900 transition-all duration-500"></div>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(120,119,198,0.1),transparent)] dark:bg-[radial-gradient(circle_at_30%_20%,rgba(120,119,198,0.05),transparent)]"></div>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(236,72,153,0.1),transparent)] dark:bg-[radial-gradient(circle_at_70%_80%,rgba(236,72,153,0.05),transparent)]"></div>
+    <main
+      className="min-h-screen p-4 sm:p-6 xl:flex xl:h-screen xl:min-h-0 xl:flex-col xl:overflow-hidden"
+      style={{ paddingRight: "calc(1rem + var(--offset))", paddingBottom: "calc(1rem + var(--offset))" }}
+    >
+      <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-4 xl:min-h-0 xl:flex-grow">
 
-      {/* Content */}
-      <div className="relative z-10 px-4 py-8">
-        <div className="max-w-7xl mx-auto space-y-8">
-          {/* Header */}
-          <header className="relative">
-            <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-xl dark:shadow-2xl p-6 border border-white/20 dark:border-gray-700/50 transition-all duration-300">
-              <div className="flex flex-col lg:flex-row justify-between items-center gap-6">
-                {/* Brand Section */}
-                <div className="flex items-center gap-4">
-                  <div className="relative">
-                    <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-                      <Code2 className="h-6 w-6 text-white" />
-                    </div>
-                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full animate-pulse"></div>
-                  </div>
-                  <div>
-                    <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-gray-100 dark:to-gray-300 bg-clip-text text-transparent">
-                      ByteCode
-                    </h1>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 font-medium flex items-center gap-1">
-                      <Zap className="h-3 w-3" />
-                      Online Compiler
-                    </p>
-                  </div>
-                </div>
-
-                {/* Controls Section */}
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-3 p-2 bg-gray-50/50 dark:bg-gray-700/50 rounded-xl backdrop-blur-sm border border-gray-200/50 dark:border-gray-600/50">
-                    <LanguageSelector language={language} setLanguage={setLanguage} />
-                    <div className="w-px h-8 bg-gray-300 dark:bg-gray-600"></div>
-                    <ThemeToggle />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </header>
-
-          {/* Main Content Grid */}
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-            {/* Code Editor Section */}
-            <div className="xl:col-span-2 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
-                  <Code2 className="h-5 w-5" />
-                  Code Editor
-                </h2>
-                <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                  Ready to code
-                </div>
-              </div>
-
-              <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                <div className="relative bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-2xl shadow-xl dark:shadow-2xl border border-white/20 dark:border-gray-700/50 overflow-hidden transition-all duration-300">
-                  {/* Editor Header */}
-                  <div className="bg-gray-50/80 dark:bg-gray-900/80 px-6 py-3 border-b border-gray-200/50 dark:border-gray-700/50 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="flex gap-1.5">
-                        <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                        <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                      </div>
-                      <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                        {/* {language || "Select Language"}  */}
-                        main.
-                        {language === "python" ? "py" : language === "java" ? "java" : "cpp"}
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">Lines: {code.split("\n").length}</div>
-                  </div>
-
-                  {/* Monaco Editor */}
-                  <div className="relative">
-                    <Editor
-                      height="450px"
-                      language={language}
-                      theme="vs-dark"
-                      value={code}
-                      onChange={(value) => setCode(value || "")}
-                      options={{
-                        fontSize: 14,
-                        minimap: { enabled: false },
-                        wordWrap: "on",
-                        scrollBeyondLastLine: false,
-                        fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-                        lineHeight: 1.6,
-                        padding: { top: 16, bottom: 16 },
-                        smoothScrolling: true,
-                        cursorBlinking: "smooth",
-                        renderLineHighlight: "gutter",
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Run Button Section */}
-              <div className="flex justify-end">
-                <RunButton onClick={handleRun} />
-              </div>
-            </div>
-
-            {/* Output Section */}
-            <div className="space-y-4">
-              <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
-                <Terminal className="h-5 w-5" />
-                Output
-              </h2>
-
-              <div className="sticky top-8">
-                <OutputBox output={output} />
-
-                {/* Stats Card */}
-                <div className="mt-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl shadow-lg border border-white/20 dark:border-gray-700/50 p-4 transition-all duration-300">
-                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Session Stats</h3>
-                  <div className="grid grid-cols-2 gap-4 text-center">
-                    <div className="p-3 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg">
-                      <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{code.length}</div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">Characters</div>
-                    </div>
-                    <div className="p-3 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-lg">
-                      <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                        {code.split("\n").length}
-                      </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">Lines</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+        {/* header */}
+        <header className="flex flex-wrap items-stretch gap-3">
+          <div
+            className="flex items-center px-5 text-[19px] font-bold tracking-[-0.02em]"
+            style={{ background: "var(--ink)", color: "var(--bg)" }}
+          >
+            BYTECODE
           </div>
 
-          {/* Footer */}
-          <footer className="text-center py-6">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-full border border-white/20 dark:border-gray-700/50">
-              <div className="w-2 h-2 rounded-full bg-gradient-to-r from-green-400 to-emerald-500 animate-pulse"></div>
-              <span className="text-sm text-gray-600 dark:text-gray-400">Powered by ByteCode Engine</span>
+          <LanguageSelector language={language} setLanguage={setLanguage} />
+
+          <div className="flex-grow" />
+
+          <ThemeToggle />
+        </header>
+
+        {/* body */}
+        <div className="grid grid-cols-1 gap-4 xl:min-h-0 xl:flex-grow xl:grid-cols-[minmax(0,1fr)_452px] xl:gap-5">
+
+          {/* editor */}
+          <section className="blk flex min-w-0 flex-col">
+            <div className="blk-head" style={{ color: "var(--ink)" }}>
+              <span>{FILENAMES[language] ?? "main"}</span>
+              <span style={{ fontWeight: 400, color: "var(--ink-faint)" }}>
+                {lineCount} {lineCount === 1 ? "line" : "lines"}
+              </span>
             </div>
-          </footer>
+
+            <div className="h-[340px] sm:h-[420px] xl:h-auto xl:min-h-0 xl:flex-grow">
+              {editorFailed ? (
+                <CodeFallback code={code} setCode={setCode} language={language} />
+              ) : (
+              <Editor
+                height="100%"
+                language={language}
+                theme={isDark ? "bytecode-dark" : "bytecode-light"}
+                value={code}
+                onChange={(value) => setCode(value || "")}
+                onMount={() => setEditorReady(true)}
+                beforeMount={(monaco) => {
+                  Object.entries(THEMES).forEach(([name, theme]) => {
+                    monaco.editor.defineTheme(name, { ...theme, inherit: true })
+                  })
+                }}
+                options={{
+                  fontSize: 13.5,
+                  lineHeight: 25,
+                  minimap: { enabled: false },
+                  wordWrap: "on",
+                  scrollBeyondLastLine: false,
+                  fontFamily: "var(--font-mono), ui-monospace, monospace",
+                  padding: { top: 16, bottom: 16 },
+                  smoothScrolling: true,
+                  renderLineHighlight: "line",
+                  overviewRulerLanes: 0,
+                  scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
+                }}
+              />
+              )}
+            </div>
+
+            <div
+              className="flex flex-wrap items-center gap-4 p-3"
+              style={{ borderTop: "var(--border-w) solid var(--line)" }}
+            >
+              <RunButton onClick={handleRun} isRunning={isRunning} disabled={!code.trim()} />
+              <span className="meta">ctrl+enter</span>
+            </div>
+          </section>
+
+          {/* right rail */}
+          <aside className="flex min-w-0 flex-col gap-4 xl:gap-5">
+            <InputBox stdin={stdin} setStdin={setStdin} />
+            <div className="flex min-h-0 flex-grow flex-col">
+              <OutputBox result={result} isRunning={isRunning} />
+            </div>
+            <div className="meta">256 MB · 0.5 CPU · no network · 10 s limit</div>
+          </aside>
         </div>
       </div>
     </main>

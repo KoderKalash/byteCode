@@ -3,15 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/copy-monaco.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/copy-monaco.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
-    "lucide": "^0.523.0",
-    "lucide-react": "^0.523.0",
+    "monaco-editor": "0.52.2",
     "next": "15.3.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

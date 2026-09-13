@@ -1,0 +1,98 @@
+#!/bin/sh
+# Stand-in for the docker CLI, used by the test suite. It records the argv it was
+# called with and then behaves according to FAKE_DOCKER_MODE, so the executor can
+# be tested without a running Docker daemon.
+
+[ -n "$FAKE_DOCKER_LOG" ] && printf '%s\n' "$*" >> "$FAKE_DOCKER_LOG"
+
+# `docker kill <name>` — just record it and succeed.
+if [ "$1" = "kill" ]; then
+  exit 0
+fi
+
+# Recover the bind-mounted work directory from `-v <dir>:/sandbox`.
+workdir=""
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "-v" ]; then
+    workdir=$(printf '%s' "$arg" | sed 's|:/sandbox$||')
+  fi
+  prev="$arg"
+done
+
+is_compile=0
+case "$*" in
+  *" g++ "*|*" javac "*) is_compile=1 ;;
+esac
+
+case "${FAKE_DOCKER_MODE:-ok}" in
+  ok)
+    [ "$is_compile" = "1" ] && exit 0
+    echo "HELLO"
+    exit 0
+    ;;
+  echo_source)
+    # Print the submitted source back, proving each request saw its own file.
+    [ "$is_compile" = "1" ] && exit 0
+    cat "$workdir"/main.py 2>/dev/null || cat "$workdir"/main.cpp 2>/dev/null
+    exit 0
+    ;;
+  echo_stdin)
+    # Read stdin and print it back, so the test can prove input was delivered.
+    [ "$is_compile" = "1" ] && exit 0
+    cat
+    exit 0
+    ;;
+  ignore_stdin)
+    # A program that never reads its input: the write side sees EPIPE.
+    [ "$is_compile" = "1" ] && exit 0
+    echo "did not read input"
+    exit 0
+    ;;
+  compile_fail)
+    if [ "$is_compile" = "1" ]; then
+      echo "main.cpp:3:14: error: expected ';' before '}' token" >&2
+      exit 1
+    fi
+    echo "should never run"
+    exit 0
+    ;;
+  runtime_fail)
+    [ "$is_compile" = "1" ] && exit 0
+    echo "partial output"
+    echo "Traceback (most recent call last): ZeroDivisionError" >&2
+    exit 1
+    ;;
+  slow)
+    # Occupies an execution slot long enough for requests to overlap.
+    [ "$is_compile" = "1" ] && exit 0
+    sleep 1
+    echo "SLOW"
+    exit 0
+    ;;
+  hang)
+    [ "$is_compile" = "1" ] && exit 0
+    sleep 30
+    exit 0
+    ;;
+  flood)
+    [ "$is_compile" = "1" ] && exit 0
+    i=0
+    while [ $i -lt 5000 ]; do
+      echo "0123456789012345678901234567890123456789"
+      i=$((i + 1))
+    done
+    exit 0
+    ;;
+  daemon_down)
+    echo "failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /var/run/docker.sock: connect: no such file or directory" >&2
+    exit 1
+    ;;
+  no_image)
+    echo "Unable to find image 'bytecode-python:latest' locally" >&2
+    exit 125
+    ;;
+  missing)
+    exit 127
+    ;;
+esac
