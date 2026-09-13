@@ -1,78 +1,57 @@
 "use client"
 
-import { Terminal, CheckCircle2, XCircle, AlertTriangle, Clock, Loader2, Hourglass } from "lucide-react"
-
 /**
- * One presentation per outcome the API can return. Previously every result —
- * success, compile error, timeout, throttling — was the same grey text in a
- * <pre>, so the panel could not tell the user what had actually happened.
+ * The output panel is a terminal in both themes — the one surface that stays
+ * dark, so program output always reads as program output.
+ *
+ * One presentation per outcome the API can return: previously every result —
+ * success, compile error, timeout, throttling — was the same grey text.
  */
 const OUTCOMES = {
-  ok: { label: "Success", tone: "ok", Icon: CheckCircle2 },
-  runtime_error: { label: "Runtime error", tone: "bad", Icon: XCircle },
-  compile_error: { label: "Compile error", tone: "warn", Icon: AlertTriangle },
-  timeout: { label: "Timed out", tone: "warn", Icon: Clock },
-  invalid: { label: "Invalid request", tone: "warn", Icon: AlertTriangle },
-  rate_limited: { label: "Too many requests", tone: "warn", Icon: Hourglass },
-  capacity: { label: "Server busy", tone: "warn", Icon: Hourglass },
-  sandbox: { label: "Sandbox unavailable", tone: "bad", Icon: XCircle },
-  server: { label: "Server error", tone: "bad", Icon: XCircle },
-  network: { label: "Can't reach the API", tone: "bad", Icon: XCircle },
+  ok: { label: "exit 0", tone: "ok" },
+  runtime_error: { label: "runtime error", tone: "bad" },
+  compile_error: { label: "compile error", tone: "warn" },
+  timeout: { label: "timed out", tone: "warn" },
+  invalid: { label: "invalid request", tone: "warn" },
+  rate_limited: { label: "rate limited", tone: "warn" },
+  capacity: { label: "server busy", tone: "warn" },
+  sandbox: { label: "sandbox down", tone: "bad" },
+  server: { label: "server error", tone: "bad" },
+  network: { label: "no connection", tone: "bad" },
 }
 
-const TONES = {
-  ok: "text-emerald-400",
-  bad: "text-red-400",
-  warn: "text-amber-400",
-}
+const TONES = { ok: "var(--ok)", bad: "var(--bad)", warn: "var(--warn)" }
 
-function StatusBar({ result, isRunning }) {
-  if (isRunning) {
-    return (
-      <div className="flex items-center gap-2 text-xs text-gray-400">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        <span>Running…</span>
-      </div>
-    )
-  }
+// Outcomes that never reached the program: the message is the whole story.
+const MESSAGE_ONLY = ["invalid", "rate_limited", "capacity", "sandbox", "server", "network"]
 
-  if (!result) return <span className="text-xs text-gray-500">Idle</span>
+function Status({ result, isRunning }) {
+  if (isRunning) return <span style={{ color: "var(--term-dim)" }}>running…</span>
+  if (!result) return <span style={{ color: "var(--term-dim)" }}>idle</span>
 
   const outcome = OUTCOMES[result.kind] ?? OUTCOMES.server
-  const { Icon } = outcome
-  const tone = TONES[outcome.tone]
-
-  // Only meaningful for a program that actually ran.
-  const meta = []
-  if (result.exitCode !== null && result.exitCode !== undefined) {
-    meta.push(`exit ${result.exitCode}`)
+  const bits = []
+  if (result.kind !== "ok" && result.exitCode !== null && result.exitCode !== undefined) {
+    bits.push(`exit ${result.exitCode}`)
   }
-  if (typeof result.durationMs === "number") meta.push(`${result.durationMs} ms`)
+  if (typeof result.durationMs === "number") bits.push(`${result.durationMs} ms`)
 
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-      <span className={`flex items-center gap-1.5 font-medium ${tone}`}>
-        <Icon className="h-3.5 w-3.5" />
-        {outcome.label}
-      </span>
-      {meta.length > 0 && <span className="text-gray-500">· {meta.join(" · ")}</span>}
-    </div>
+    <span style={{ color: TONES[outcome.tone] }}>
+      {outcome.label}
+      {bits.length > 0 && (
+        <span style={{ color: "var(--term-dim)" }}> · {bits.join(" · ")}</span>
+      )}
+    </span>
   )
 }
 
 function Body({ result, isRunning }) {
-  if (isRunning && !result) {
-    return <span className="text-gray-500 italic">Running your code…</span>
-  }
+  if (isRunning && !result) return <span style={{ color: "var(--term-dim)" }}>running your code…</span>
+  if (!result) return <span style={{ color: "var(--term-dim)" }}>output will appear here.</span>
 
-  if (!result) {
-    return <span className="text-gray-500 italic">Output will appear here.</span>
-  }
-
-  // For outcomes that never reached the program, the message is the whole story.
-  const messageOnly = ["invalid", "rate_limited", "capacity", "sandbox", "server", "network"]
-  if (messageOnly.includes(result.kind)) {
-    return <span className="text-gray-300">{result.output || "No details."}</span>
+  if (MESSAGE_ONLY.includes(result.kind)) {
+    return <span>{result.output || "No details."}</span>
   }
 
   const hasStdout = Boolean(result.stdout)
@@ -80,17 +59,18 @@ function Body({ result, isRunning }) {
 
   if (!hasStdout && !hasStderr) {
     return (
-      <span className="text-gray-500 italic">
-        {result.output || "The program produced no output."}
+      <span style={{ color: "var(--term-dim)" }}>
+        {result.output || "the program produced no output."}
       </span>
     )
   }
 
   return (
     <>
-      {hasStdout && <span className="text-gray-100">{result.stdout}</span>}
+      {hasStdout && <span>{result.stdout}</span>}
       {hasStderr && (
-        <span className={result.ok ? "text-amber-300" : "text-red-300"}>
+        // A program that exited 0 but wrote to stderr produced warnings, not errors.
+        <span style={{ color: result.ok ? "var(--warn)" : "var(--bad)" }}>
           {hasStdout ? "\n" : ""}
           {result.stderr}
         </span>
@@ -101,37 +81,44 @@ function Body({ result, isRunning }) {
 
 export default function OutputBox({ result, isRunning = false }) {
   return (
-    <div className="relative">
-      <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-lg overflow-hidden">
-        {/* Header */}
-        <div className="bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2">
-          <Terminal className="h-4 w-4 text-gray-400 shrink-0" />
-          <span className="text-sm font-medium text-gray-300">Output</span>
-          <div className="ml-auto min-w-0">
-            <StatusBar result={result} isRunning={isRunning} />
-          </div>
-        </div>
-
-        {/* Output */}
-        <div className="p-4 h-48 overflow-auto">
-          <pre className="text-sm font-mono leading-relaxed whitespace-pre-wrap break-words">
-            <Body result={result} isRunning={isRunning} />
-          </pre>
-        </div>
-
-        {/* Footnotes the user would otherwise have no way to know about. */}
-        {result?.truncated && (
-          <div className="bg-gray-800/80 px-4 py-1.5 border-t border-gray-700 text-xs text-amber-400">
-            Output was truncated — the program printed more than the limit.
-          </div>
-        )}
-        {result?.kind === "timeout" && (
-          <div className="bg-gray-800/80 px-4 py-1.5 border-t border-gray-700 text-xs text-amber-400">
-            The program was stopped. Check for an infinite loop, or for input it
-            expected but never received.
-          </div>
-        )}
+    <div
+      className="flex min-h-0 flex-grow flex-col"
+      style={{
+        background: "var(--term-bg)",
+        border: "var(--border-w) solid var(--line)",
+        boxShadow: "var(--offset) var(--offset) 0 var(--shadow)",
+      }}
+    >
+      <div
+        className="blk-head"
+        style={{ color: "var(--term-fg)", borderBottomColor: "var(--accent)" }}
+      >
+        <span>stdout</span>
+        <span className="mono" style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none" }}>
+          <Status result={result} isRunning={isRunning} />
+        </span>
       </div>
+
+      <div className="flex-grow overflow-auto p-4" style={{ minHeight: 170 }}>
+        <pre
+          className="mono text-[13.5px] leading-[25px] whitespace-pre-wrap break-words"
+          style={{ margin: 0, color: "var(--term-fg)" }}
+        >
+          <Body result={result} isRunning={isRunning} />
+        </pre>
+      </div>
+
+      {/* Footnotes for things the user would otherwise have no way to learn. */}
+      {result?.truncated && (
+        <div className="mono px-4 py-1.5 text-[11px]" style={{ borderTop: "var(--border-w) solid var(--warn)", color: "var(--warn)" }}>
+          output truncated — the program printed more than the limit
+        </div>
+      )}
+      {result?.kind === "timeout" && (
+        <div className="mono px-4 py-1.5 text-[11px]" style={{ borderTop: "var(--border-w) solid var(--warn)", color: "var(--warn)" }}>
+          stopped — check for an infinite loop, or input it expected but never got
+        </div>
+      )}
     </div>
   )
 }
