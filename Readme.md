@@ -47,6 +47,39 @@ your users without warning.
 
 ---
 
+## 🔗 Sharing a snippet
+
+Press **Share**. The link lands on your clipboard and the address bar becomes:
+
+```
+https://your-bytecode-host/?s=q3TXAAjWvfMd
+```
+
+Opening it restores **three** things, not one — the code, the **language**, and
+the **stdin**. That last one is the whole point: a program that reads input is
+useless to whoever you sent it to if the input didn't travel with the link.
+
+The id is written into the URL with `history.replaceState` rather than a
+navigation, so reload and the back button keep working, and the address bar *is*
+the link even if the browser refuses the clipboard write.
+
+A few things worth knowing before you paste one into a group chat:
+
+| | |
+|---|---|
+| **Unlisted, not private** | Anyone holding the link can read the snippet. Ids are unguessable, but that is not access control — don't share secrets this way |
+| **They expire** | After `SNIPPET_TTL_DAYS` (90 by default). A dead link shows a dismissible notice and leaves the editor usable, rather than silently doing nothing |
+| **Read-only for the recipient** | Opening a link loads the code into *their* editor. Their edits don't touch your snippet; sharing back means pressing Share again |
+| **Creating is throttled, opening is not** | 30 new snippets per hour per IP, but reads are deliberately unlimited — rate-limiting those would break the one thing a share link is for |
+
+Set `SNIPPETS_ENABLED=false` to turn the feature off: the two endpoints stop
+being served, no database is created, and `GET /health` reports
+`"snippets": false`. Note that the frontend does not currently read that flag —
+the Share button stays on screen and reports an error if pressed, so a
+deployment that disables sharing should hide it in the UI too.
+
+---
+
 ## 🔒 How the sandbox works
 
 Each `POST /run-code` gets its own throwaway directory under the system temp dir.
@@ -285,7 +318,7 @@ cd backend
 npm test
 ```
 
-32 tests, covering execution, throttling and the concurrency gate.
+44 tests, covering execution, throttling, the concurrency gate and snippet storage.
 
 The suite runs without a Docker daemon: it puts a stub `docker` CLI on `PATH`
 (`test/fixtures/docker`) and asserts on how the real one *would* be invoked —
