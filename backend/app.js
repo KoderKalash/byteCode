@@ -28,10 +28,21 @@ app.use(express.json({ limit: "1mb" }))
 
 // Deliberately not rate limited, so monitoring never trips the limiter.
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", languages: languages.ids, executions: gate.stats })
+  res.json({
+    status: "ok",
+    languages: languages.ids,
+    executions: gate.stats,
+    snippets: config.snippets.enabled,
+  })
 })
 
 app.use("/run-code", runCodeLimiter, codeRoutes)
+
+if (config.snippets.enabled) {
+  // Required so the module (and its database file) is only touched when the
+  // feature is on — a deployment that disables snippets should not create one.
+  app.use("/snippets", require("./routes/snippets"))
+}
 
 app.use((req, res) => res.status(404).json({ ok: false, error: "Not found" }))
 
@@ -44,9 +55,25 @@ app.use((err, req, res, next) => {
 })
 
 if (require.main === module) {
+  if (config.snippets.enabled) {
+    const { store } = require("./snippets/store")
+
+    const sweep = () => {
+      const removed = store.purgeExpired()
+      if (removed > 0) console.log(`[SNIPPETS] purged ${removed} expired`)
+    }
+
+    sweep()
+    // unref so the timer never holds the process open on shutdown.
+    setInterval(sweep, config.snippets.purgeIntervalMs).unref()
+  }
+
   app.listen(config.port, () => {
     console.log(`ByteCode API listening on http://localhost:${config.port}`)
     console.log(`Languages: ${languages.ids.join(", ")}`)
+    if (config.snippets.enabled) {
+      console.log(`Snippets: on, expiring after ${config.snippets.ttlDays} days`)
+    }
   })
 }
 

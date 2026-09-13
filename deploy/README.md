@@ -75,6 +75,28 @@ the sum and nginx returns `504` for requests the API would have answered, so
 the user sees a gateway error instead of a proper "timed out" result. Raise the
 app's timeouts and you must raise nginx's too.
 
+### Snippets and the database
+
+Share links are stored in SQLite (node's built-in `node:sqlite` — no extra
+service, no native module to compile). `SNIPPET_DB_PATH` **must** point inside
+`/var/lib/bytecode`: the unit runs `ProtectSystem=strict`, so `/opt` is
+read-only and the packaged default would fail to open.
+
+It is the only state on the box worth backing up:
+
+```bash
+# SQLite-safe copy; do not just cp a live database.
+sqlite3 /var/lib/bytecode/snippets.db ".backup '/root/snippets-backup.db'"
+```
+
+Snippets expire after `SNIPPET_TTL_DAYS` (90 by default) and a sweep runs
+hourly, so the file reaches a steady size rather than growing forever. Sharing
+can be turned off entirely with `SNIPPETS_ENABLED=false`, in which case no
+database is created.
+
+**Share links are unlisted, not private.** Ids are random and unguessable, but
+anyone with a link can read the snippet. Do not tell users it is private.
+
 ### Sizing
 
 Peak memory is roughly `MAX_CONCURRENT_EXECUTIONS × SANDBOX_MEMORY`, on top of

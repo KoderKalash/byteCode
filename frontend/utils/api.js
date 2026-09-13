@@ -71,4 +71,55 @@ export async function runCode({ language, code, stdin }) {
   }
 }
 
+/**
+ * Save the current editor contents and get back a short id to share.
+ * Returns { ok, id } or { ok: false, error }.
+ */
+export async function createSnippet({ language, code, stdin }) {
+  let res
+  try {
+    res = await fetch(`${API_BASE}/snippets`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ language, code, stdin }),
+    })
+  } catch {
+    return { ok: false, error: "Could not reach the API." }
+  }
+
+  let data
+  try {
+    data = await res.json()
+  } catch {
+    return { ok: false, error: `Unexpected response (HTTP ${res.status}).` }
+  }
+
+  if (!res.ok || !data.ok) {
+    return { ok: false, error: data.error || `Could not save the snippet (HTTP ${res.status}).` }
+  }
+  return { ok: true, id: data.id, expiresAt: data.expiresAt }
+}
+
+/** Load a shared snippet by id. Returns { ok, language, code, stdin } or { ok: false, error }. */
+export async function fetchSnippet(id) {
+  let res
+  try {
+    res = await fetch(`${API_BASE}/snippets/${encodeURIComponent(id)}`)
+  } catch {
+    return { ok: false, error: "Could not reach the API." }
+  }
+
+  let data
+  try {
+    data = await res.json()
+  } catch {
+    return { ok: false, error: `Unexpected response (HTTP ${res.status}).` }
+  }
+
+  if (!res.ok || !data.ok) {
+    return { ok: false, error: data.error || "That snippet could not be loaded." }
+  }
+  return { ok: true, language: data.language, code: data.code, stdin: data.stdin ?? "" }
+}
+
 export { API_BASE }

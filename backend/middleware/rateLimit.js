@@ -23,4 +23,24 @@ const runCodeLimiter = rateLimit({
   },
 })
 
-module.exports = { runCodeLimiter }
+/**
+ * Per-IP limit for creating snippets.
+ *
+ * Far stricter than the run limit and over a much longer window: running code
+ * costs CPU for ten seconds, but creating a snippet costs disk forever (well,
+ * until it expires). This is the budget that stops the share endpoint being
+ * used as free storage.
+ */
+const snippetLimiter = rateLimit({
+  windowMs: config.snippets.rateLimitWindowMs,
+  limit: config.snippets.rateLimitMax,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: {
+    ok: false,
+    error: "Too many snippets created. Please try again later.",
+    stage: "rate_limited",
+  },
+})
+
+module.exports = { runCodeLimiter, snippetLimiter }

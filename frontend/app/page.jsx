@@ -9,7 +9,8 @@ import OutputBox from "@/components/OutputBox"
 import InputBox from "@/components/InputBox"
 import ThemeToggle from "@/components/ThemeToggle"
 import CodeFallback from "@/components/CodeFallback"
-import { runCode } from "@/utils/api"
+import ShareButton from "@/components/ShareButton"
+import { runCode, createSnippet, fetchSnippet } from "@/utils/api"
 import useIsDark from "@/hooks/useIsDark"
 import languages, { DEFAULT_LANGUAGE } from "@/constants/languages"
 
@@ -52,6 +53,7 @@ export default function Home() {
   const [stdin, setStdin] = useState("")
   const [result, setResult] = useState(null)
   const [isRunning, setIsRunning] = useState(false)
+  const [snippetNotice, setSnippetNotice] = useState("")
   const [editorReady, setEditorReady] = useState(false)
   const [editorFailed, setEditorFailed] = useState(false)
   const isDark = useIsDark()
@@ -91,6 +93,41 @@ export default function Home() {
     } finally {
       setIsRunning(false)
     }
+  }
+
+  // A share link is /?s=<id>. Load it once on mount, before the user types.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("s")
+    if (!id) return
+
+    let cancelled = false
+    fetchSnippet(id).then((result) => {
+      if (cancelled) return
+      if (!result.ok) {
+        setSnippetNotice(result.error)
+        return
+      }
+      setLanguage(result.language)
+      setCode(result.code)
+      setStdin(result.stdin)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const handleShare = async () => {
+    const result = await createSnippet({ language, code, stdin })
+    if (!result.ok) return result
+
+    // Put the id in the URL without a navigation, so reload and back still work
+    // and the address bar is the link even if the clipboard write is refused.
+    const url = new URL(window.location.href)
+    url.searchParams.set("s", result.id)
+    window.history.replaceState(null, "", url)
+
+    return { ok: true, url: url.toString() }
   }
 
   // Ctrl/Cmd+Enter runs. The ref keeps the listener pointed at the current
@@ -133,6 +170,24 @@ export default function Home() {
 
           <ThemeToggle />
         </header>
+
+        {snippetNotice ? (
+          <div
+            className="mono flex items-center justify-between gap-4 px-4 py-2 text-[12px]"
+            style={{ background: "var(--warn)", color: "#121212", border: "var(--border-w) solid var(--line)" }}
+          >
+            <span>{snippetNotice}</span>
+            <button
+              type="button"
+              onClick={() => setSnippetNotice("")}
+              aria-label="Dismiss"
+              className="font-bold"
+              style={{ cursor: "pointer" }}
+            >
+              ✕
+            </button>
+          </div>
+        ) : null}
 
         {/* body */}
         <div className="grid grid-cols-1 gap-4 xl:min-h-0 xl:flex-grow xl:grid-cols-[minmax(0,1fr)_452px] xl:gap-5">
@@ -185,6 +240,8 @@ export default function Home() {
             >
               <RunButton onClick={handleRun} isRunning={isRunning} disabled={!code.trim()} />
               <span className="meta">ctrl+enter</span>
+              <div className="flex-grow" />
+              <ShareButton onShare={handleShare} disabled={!code.trim()} />
             </div>
           </section>
 
