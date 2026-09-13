@@ -14,6 +14,28 @@ Hetzner, DigitalOcean, Fly.io, a machine under your desk.
 
 ---
 
+## Order of operations
+
+Each half needs the other's URL — the API needs the frontend's origin for
+`CORS_ORIGINS`, the frontend needs the API's origin for `NEXT_PUBLIC_API_URL` —
+so do them in this order and neither one blocks:
+
+1. **Deploy the frontend to Vercel first.** It builds and serves fine with no
+   API behind it; only *running* code fails. This is how you learn your
+   `*.vercel.app` URL.
+2. **Provision the VPS** and set `CORS_ORIGINS` to that URL.
+3. **Point DNS** at the VPS, get the certificate, install the proxy.
+4. **Set `NEXT_PUBLIC_API_URL`** to the API's HTTPS domain and **redeploy** the
+   frontend — it is inlined at build time, so a redeploy is required.
+
+**The API must be served over HTTPS.** Vercel is HTTPS-only, and a browser
+blocks requests from an HTTPS page to an `http://` endpoint as mixed content.
+An IP address will not do either: Let's Encrypt does not issue for bare IPs, so
+the API needs a real domain name. If you do not have one, get that before
+anything else.
+
+---
+
 ## Read this before provisioning the VPS
 
 The API needs to reach the Docker socket, which means its service account is in
@@ -43,20 +65,48 @@ account; installs production dependencies; **builds the three sandbox images**
 systemd unit; and starts the service. It is idempotent — re-run it to deploy an
 update.
 
-Then, by hand:
+Then, by hand. **The certificate comes before the proxy config, not after** —
+`nginx.conf` names certificate files by path, so installing it first leaves
+nginx unable to pass `nginx -t`, and `certbot --nginx` cannot edit a config
+that will not validate.
 
+0. **Point DNS at the box first.** An `A` record for `api.example.com` at the
+   VPS's address, and let it resolve before step 3 — certbot proves control of
+   the name over port 80 and fails if it still points elsewhere.
 1. **Edit `/etc/bytecode/bytecode.env`.** `CORS_ORIGINS` ships pointing at a
    placeholder. The API's own default is `*`, which would let any site on the
    internet drive your compiler.
-2. **Install the proxy.** Copy `deploy/nginx.conf` to
-   `/etc/nginx/sites-available/bytecode-api`, replace `api.example.com`,
-   symlink into `sites-enabled`, drop the default site, `nginx -t`, reload.
-3. **Get a certificate:** `certbot --nginx -d api.example.com`.
-4. **Firewall:** allow 80/443 only. Port 5000 must not be reachable from
-   outside — the API binds it and nginx is what the world talks to.
+   ```bash
+   systemctl restart bytecode-api
+   ```
+2. **Open port 80 and 443** (certbot needs 80 reachable in step 3). Port 5000
+   must never be reachable from outside — the API binds it and nginx is what
+   the world talks to.
    ```bash
    ufw allow OpenSSH && ufw allow 'Nginx Full' && ufw enable
    ```
+3. **Get the certificate, using the stock default site**, which already serves
+   `/var/www/html` on port 80:
+   ```bash
+   certbot certonly --webroot -w /var/www/html -d api.example.com
+   ```
+   `certonly` deliberately: it writes the certificate and touches no config, so
+   there is nothing for it to get wrong.
+4. **Now install the proxy**, with the certificate already on disk:
+   ```bash
+   sed 's/api\.example\.com/your-real-domain/g' /opt/bytecode/deploy/nginx.conf \
+     > /etc/nginx/sites-available/bytecode-api
+   ln -sf /etc/nginx/sites-available/bytecode-api /etc/nginx/sites-enabled/
+   rm -f /etc/nginx/sites-enabled/default
+   nginx -t && systemctl reload nginx
+   ```
+   If `nginx -t` fails on a missing certificate, step 3 did not actually
+   succeed — read its output rather than pressing on.
+5. **Check it end to end**, from your laptop and not from the box:
+   ```bash
+   curl https://your-real-domain/health
+   ```
+   That must return JSON over TLS before Vercel has any chance of working.
 
 ### Two settings that are easy to get wrong
 
