@@ -3,6 +3,7 @@ const assert = require("node:assert/strict")
 const fs = require("node:fs")
 const os = require("node:os")
 const path = require("node:path")
+const { spawn } = require("node:child_process")
 
 // A throwaway database per run, and a generous create limit so the limiter is
 // not what these tests are measuring. Both must be set before config.js loads.
@@ -12,6 +13,7 @@ process.env.SNIPPET_RATE_LIMIT_MAX = "1000"
 process.env.RATE_LIMIT_MAX = "100000"
 
 const app = require("../app")
+const { SnippetStore } = require("../snippets/store")
 
 let server
 let baseUrl
@@ -102,7 +104,6 @@ test("the store survives a reopen, so restarts do not lose snippets", async () =
   const { id } = await create({ language: "python", code: "print('persisted')" }).then((r) => r.json())
 
   // Open the same file independently, as a restarted process would.
-  const { SnippetStore } = require("../snippets/store")
   const reopened = new SnippetStore({
     dbPath: process.env.SNIPPET_DB_PATH,
     ttlDays: 90,
@@ -116,4 +117,41 @@ test("the store survives a reopen, so restarts do not lose snippets", async () =
 test("health reports that snippets are enabled", async () => {
   const body = await fetch(`${baseUrl}/health`).then((r) => r.json())
   assert.equal(body.snippets, true)
+})
+
+test("concurrent first-opens of one database do not collide", async () => {
+  // Switching a fresh database to WAL takes a brief exclusive lock. Several
+  // processes opening the same new file at once — which is exactly what
+  // `node --test` does across suites — used to make all but one of them fail
+  // with SQLITE_BUSY ("database is locked") at startup.
+  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "snippets-race-")), "s.db")
+  const source = `
+    process.env.SNIPPET_DB_PATH = ${JSON.stringify(dbPath)}
+    const { store } = require(${JSON.stringify(require.resolve("../snippets/store"))})
+    store.create({ language: "python", code: "print(1)" })
+    store.close()
+  `
+
+  const opens = [...Array(8)].map(
+    () =>
+      new Promise((resolve) => {
+        const child = spawn(process.execPath, ["-e", source], { stdio: ["ignore", "ignore", "pipe"] })
+        let stderr = ""
+        child.stderr.on("data", (chunk) => (stderr += chunk))
+        child.on("close", (code) => resolve({ code, stderr }))
+      })
+  )
+
+  const results = await Promise.all(opens)
+  const failed = results.filter((r) => r.code !== 0)
+  assert.deepEqual(
+    failed.map((r) => r.stderr.trim().split("\n").at(-1)),
+    [],
+    "every process should have opened the database"
+  )
+
+  const opened = new SnippetStore({ dbPath, ttlDays: 90, idBytes: 9 })
+  assert.equal(opened.count(), 8, "and every one of them should have written a row")
+  opened.close()
+  fs.rmSync(path.dirname(dbPath), { recursive: true, force: true })
 })

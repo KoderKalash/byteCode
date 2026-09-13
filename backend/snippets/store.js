@@ -24,6 +24,13 @@ class SnippetStore {
     this.ttlMs = ttlDays * 24 * 60 * 60 * 1000
     this.idBytes = idBytes
 
+    // Wait for a held lock instead of failing on it. More than one process can
+    // legitimately have this file open — a restart overlapping the old process,
+    // a maintenance script, a `sqlite3` session — and without a busy handler
+    // SQLite returns SQLITE_BUSY immediately. Switching journal mode needs a
+    // brief exclusive lock, so that failure lands on the line below, at startup.
+    this.db.exec("PRAGMA busy_timeout = 5000")
+
     // WAL keeps reads from blocking on the writer, which matters because a
     // snippet read sits in front of the editor loading.
     this.db.exec("PRAGMA journal_mode = WAL")

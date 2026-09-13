@@ -15,6 +15,10 @@ process.env.MAX_OUTPUT_BYTES = "1024"
 // concurrency gate out of the way. They have their own suite in ratelimit.test.js.
 process.env.RATE_LIMIT_MAX = "100000"
 process.env.MAX_CONCURRENT_EXECUTIONS = "32"
+// `node --test` runs each file in its own process, in parallel. Nothing here
+// exercises snippets, so keep the feature off rather than have this suite open
+// the default database alongside every other suite that does the same.
+process.env.SNIPPETS_ENABLED = "false"
 
 const app = require("../app")
 
