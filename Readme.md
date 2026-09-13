@@ -107,7 +107,10 @@ explicit hop count is honoured.
 
 ## 🧪 Local Development
 
-You need **Node.js 18+** and a running **Docker** daemon.
+You need **Node.js 22 or newer** and a running **Docker** daemon.
+
+Node 20 reached end-of-life on 2026-03-24, so it is not supported. CI runs the
+backend suite on both 22 and 24 (Active LTS).
 
 ### 1. Clone
 
