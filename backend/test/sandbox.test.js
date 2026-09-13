@@ -179,6 +179,7 @@ test("validation errors are rejected before any container starts", async () => {
   const res = await run({ language: "ruby", code: "puts 1" })
 
   assert.equal(res.status, 400)
+  assert.equal((await res.json()).stage, "invalid")
   assert.equal(readLog(), "", "no container should have been started")
 })
 
@@ -203,6 +204,8 @@ test("a Docker daemon outage is a 503, not the user's program failing", async ()
   // The internal socket path must not reach the user's output panel.
   assert.doesNotMatch(data.output, /docker\.sock/)
   assert.match(data.output, /sandbox is unavailable/i)
+  // A sandbox fault and a capacity refusal are both 503; `stage` separates them.
+  assert.equal(data.stage, "sandbox")
 })
 
 test("a missing sandbox image is reported as a sandbox problem", async () => {

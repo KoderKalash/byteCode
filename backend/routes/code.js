@@ -10,7 +10,9 @@ router.post("/", async (req, res) => {
   const { language, code, stdin } = req.body || {}
 
   const invalid = validateInput(language, code, stdin)
-  if (invalid) return res.status(400).json({ ok: false, error: invalid, output: invalid })
+  if (invalid) {
+    return res.status(400).json({ ok: false, error: invalid, output: invalid, stage: "invalid" })
+  }
 
   try {
     const result = await executeCode(language, code, stdin)
@@ -48,17 +50,21 @@ router.post("/", async (req, res) => {
       // At capacity: a real answer, and the client should retry.
       if (err.stage === "capacity") {
         res.set("Retry-After", "5")
-        return res.status(503).json({ ok: false, error: err.message, output: err.message })
+        return res
+          .status(503)
+          .json({ ok: false, error: err.message, output: err.message, stage: "capacity" })
       }
 
       // Sandbox problems are ours.
       console.error(`[API] sandbox error: ${err.message}`)
-      return res.status(503).json({ ok: false, error: err.message, output: err.message })
+      return res
+        .status(503)
+        .json({ ok: false, error: err.message, output: err.message, stage: "sandbox" })
     }
 
     console.error("[API] unexpected error:", err)
     const message = "Internal server error while running your code."
-    return res.status(500).json({ ok: false, error: message, output: message })
+    return res.status(500).json({ ok: false, error: message, output: message, stage: "server" })
   }
 })
 

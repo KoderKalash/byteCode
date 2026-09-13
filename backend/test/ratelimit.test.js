@@ -60,6 +60,12 @@ test("the limit response explains itself and carries rate-limit headers", async 
   assert.ok(res.headers.get("ratelimit-policy"), "expected a RateLimit-Policy header")
 })
 
+test("the limit response identifies itself with a stage", async () => {
+  const res = await run()
+  assert.equal(res.status, 429)
+  assert.equal((await res.json()).stage, "rate_limited")
+})
+
 test("/health is not rate limited, so monitoring never trips it", async () => {
   for (let i = 0; i < 6; i += 1) {
     const res = await fetch(`${baseUrl}/health`)

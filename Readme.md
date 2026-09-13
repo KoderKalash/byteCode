@@ -12,6 +12,8 @@ doesn't build.
 ## 🛠️ Features
 
 - ✨ Monaco code editor, following the light/dark toggle
+- 🖥️ Output panel that distinguishes success, compile errors, runtime errors,
+  timeouts and throttling — each with exit code and run duration
 - 🧠 **Python**, **C++**, and **Java**
 - ⌨️ **stdin support** — feed input to your program
 - 🐳 One throwaway container per submission — no shared state between users
@@ -204,6 +206,10 @@ the timeout. It is delivered to the run phase only — a compiler has no use for
 
 A compile error, a runtime error, or a timeout is a **200** with `ok: false` —
 they're valid answers to a valid request.
+
+Every response carries a `stage` so a client can render the right state without
+pattern-matching on prose: `run`, `compile`, `invalid`, `rate_limited`,
+`capacity`, `sandbox` or `server`.
 
 | Status | Meaning |
 |---|---|

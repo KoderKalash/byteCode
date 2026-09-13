@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import Editor from "@monaco-editor/react"
 import LanguageSelector from "@/components/LanguageSelector"
 import RunButton from "@/components/RunButton"
@@ -20,18 +20,39 @@ export default function Home() {
   // left the dropdown showing C++ while the request sent no language at all.
   const [language, setLanguage] = useState(languages[0].id)
   const [stdin, setStdin] = useState("")
-  const [output, setOutput] = useState("")
+  // The whole result, not a flattened string: the output panel renders a
+  // different state for a compile error, a timeout and a throttled request.
+  const [result, setResult] = useState(null)
+  const [isRunning, setIsRunning] = useState(false)
   const isDark = useIsDark()
 
-  const handleRun = async () => {
-    setOutput("Running...")
-    const result = await runCode({ language, code, stdin })
+  const canRun = code.trim().length > 0 && !isRunning
 
-    let text = result.output || "No output."
-    if (result.truncated) text += "\n\n[output truncated]"
-    if (!result.ok && result.stage === "compile") text = `Compile error:\n${text}`
-    setOutput(text)
+  const handleRun = async () => {
+    if (!canRun) return
+    setIsRunning(true)
+    try {
+      setResult(await runCode({ language, code, stdin }))
+    } finally {
+      setIsRunning(false)
+    }
   }
+
+  // Ctrl/Cmd+Enter runs, the way every other code editor behaves. The ref keeps
+  // the listener pointed at the current handler without rebinding on each keystroke.
+  const runRef = useRef(handleRun)
+  runRef.current = handleRun
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault()
+        runRef.current()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [])
 
   return (
     <main className="min-h-screen relative overflow-hidden">
@@ -67,10 +88,10 @@ export default function Home() {
                 </div>
 
                 {/* Controls Section */}
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-3 p-2 bg-gray-50/50 dark:bg-gray-700/50 rounded-xl backdrop-blur-sm border border-gray-200/50 dark:border-gray-600/50">
+                <div className="w-full lg:w-auto">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-2 bg-gray-50/50 dark:bg-gray-700/50 rounded-xl backdrop-blur-sm border border-gray-200/50 dark:border-gray-600/50">
                     <LanguageSelector language={language} setLanguage={setLanguage} />
-                    <div className="w-px h-8 bg-gray-300 dark:bg-gray-600"></div>
+                    <div className="hidden sm:block w-px h-8 bg-gray-300 dark:bg-gray-600"></div>
                     <ThemeToggle />
                   </div>
                 </div>
@@ -138,8 +159,13 @@ export default function Home() {
               </div>
 
               {/* Run Button Section */}
-              <div className="flex justify-end">
-                <RunButton onClick={handleRun} />
+              <div className="flex flex-wrap items-center justify-end gap-3">
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  Press <kbd className="px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-600 font-mono">Ctrl</kbd>
+                  {" + "}
+                  <kbd className="px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-600 font-mono">Enter</kbd> to run
+                </span>
+                <RunButton onClick={handleRun} isRunning={isRunning} disabled={!code.trim()} />
               </div>
             </div>
 
@@ -153,7 +179,7 @@ export default function Home() {
               <div className="sticky top-8 space-y-4">
                 <InputBox stdin={stdin} setStdin={setStdin} />
 
-                <OutputBox output={output} />
+                <OutputBox result={result} isRunning={isRunning} />
 
                 {/* Stats Card */}
                 <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl shadow-lg border border-white/20 dark:border-gray-700/50 p-4 transition-all duration-300">

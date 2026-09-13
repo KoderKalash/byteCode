@@ -13,10 +13,13 @@ const runCodeLimiter = rateLimit({
   limit: config.rateLimit.max,
   standardHeaders: "draft-7", // RateLimit / RateLimit-Policy
   legacyHeaders: false,
+  // Every error response from this API carries a `stage`, so a client can render
+  // the right state without pattern-matching on prose.
   message: {
     ok: false,
     error: "Too many requests. Please slow down.",
     output: "Too many requests. Please slow down.",
+    stage: "rate_limited",
   },
 })
 

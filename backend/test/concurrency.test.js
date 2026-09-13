@@ -104,6 +104,8 @@ test("saturating the gate returns 503 with Retry-After, not a queue that grows",
   const body = await refusal.json()
   assert.equal(body.ok, false)
   assert.match(body.error, /at capacity/i)
+  // Distinguishable from a sandbox fault, which is also a 503.
+  assert.equal(body.stage, "capacity")
 })
 
 test("the gate drains back to idle once work completes", async () => {
