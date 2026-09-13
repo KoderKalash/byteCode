@@ -11,7 +11,7 @@ doesn't build.
 
 ## 🛠️ Features
 
-- ✨ Monaco code editor, following the light/dark toggle
+- ✨ Monaco code editor, self-hosted and following the light/dark toggle
 - 🖥️ Output panel that distinguishes success, compile errors, runtime errors,
   timeouts and throttling — each with exit code and run duration
 - 🧠 **Python**, **C++**, and **Java**
@@ -144,6 +144,15 @@ npm install
 cp .env.example .env.local
 npm run dev            # http://localhost:3000
 ```
+
+`npm install` is required before `dev` or `build`: the `predev`/`prebuild`
+hooks copy Monaco out of `node_modules` into `public/monaco` (~14 MB, gitignored)
+so the editor is served by this app rather than by a CDN. The app therefore
+makes **no third-party requests at runtime** — the fonts are self-hosted by
+`next/font` at build time too.
+
+If Monaco still fails to load, the editor degrades to a plain textarea rather
+than a permanent "Loading…", so the page stays usable.
 
 ---
 

@@ -1,16 +1,19 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import Editor from "@monaco-editor/react"
+import Editor, { loader } from "@monaco-editor/react"
 
 import LanguageSelector from "@/components/LanguageSelector"
 import RunButton from "@/components/RunButton"
 import OutputBox from "@/components/OutputBox"
 import InputBox from "@/components/InputBox"
 import ThemeToggle from "@/components/ThemeToggle"
+import CodeFallback from "@/components/CodeFallback"
 import { runCode } from "@/utils/api"
 import useIsDark from "@/hooks/useIsDark"
 import languages, { DEFAULT_LANGUAGE } from "@/constants/languages"
+
+loader.config({ paths: { vs: "/monaco/vs" } })
 
 const FILENAMES = { python: "main.py", cpp: "main.cpp", java: "Main.java" }
 
@@ -49,7 +52,34 @@ export default function Home() {
   const [stdin, setStdin] = useState("")
   const [result, setResult] = useState(null)
   const [isRunning, setIsRunning] = useState(false)
+  const [editorReady, setEditorReady] = useState(false)
+  const [editorFailed, setEditorFailed] = useState(false)
   const isDark = useIsDark()
+
+  // Monaco is served from this app, but a failed load should still leave a
+  // usable page rather than a permanent "Loading…".
+  //
+  // Two paths, because they catch different failures: `loader.init()` rejects
+  // when the loader script fails outright (a 404, a CSP refusal), while the
+  // deadline covers a request that stalls instead of failing — a hung network
+  // or a CDN that accepts the connection and never answers, which is the case
+  // that otherwise leaves "Loading…" on screen indefinitely.
+  useEffect(() => {
+    if (editorReady) return undefined
+
+    let cancelled = false
+    const fail = () => {
+      if (!cancelled) setEditorFailed(true)
+    }
+
+    loader.init().catch(fail)
+    const deadline = setTimeout(fail, 10000)
+
+    return () => {
+      cancelled = true
+      clearTimeout(deadline)
+    }
+  }, [editorReady])
 
   const canRun = code.trim().length > 0 && !isRunning
 
@@ -117,12 +147,16 @@ export default function Home() {
             </div>
 
             <div className="h-[340px] sm:h-[420px] xl:h-auto xl:min-h-0 xl:flex-grow">
+              {editorFailed ? (
+                <CodeFallback code={code} setCode={setCode} language={language} />
+              ) : (
               <Editor
                 height="100%"
                 language={language}
                 theme={isDark ? "bytecode-dark" : "bytecode-light"}
                 value={code}
                 onChange={(value) => setCode(value || "")}
+                onMount={() => setEditorReady(true)}
                 beforeMount={(monaco) => {
                   Object.entries(THEMES).forEach(([name, theme]) => {
                     monaco.editor.defineTheme(name, { ...theme, inherit: true })
@@ -142,6 +176,7 @@ export default function Home() {
                   scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
                 }}
               />
+              )}
             </div>
 
             <div
