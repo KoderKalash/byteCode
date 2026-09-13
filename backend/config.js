@@ -21,6 +21,31 @@ module.exports = {
   // Largest stdin payload we will accept, in characters.
   maxStdinLength: int(process.env.MAX_STDIN_LENGTH, 64 * 1024),
 
+  // Shareable snippets.
+  snippets: {
+    enabled: process.env.SNIPPETS_ENABLED !== "false",
+
+    // SQLite file. In production point this at the service's state directory
+    // so snippets survive restarts; the default is fine for local development.
+    dbPath: process.env.SNIPPET_DB_PATH || require("path").join(__dirname, "data", "snippets.db"),
+
+    // Snippets expire. Without a TTL the table only ever grows, and this is
+    // storage strangers can write to.
+    ttlDays: int(process.env.SNIPPET_TTL_DAYS, 90),
+
+    // 9 bytes -> 12 base64url characters. Random rather than sequential: ids
+    // are the only thing keeping one person's link from being guessed.
+    idBytes: int(process.env.SNIPPET_ID_BYTES, 9),
+
+    // How often expired rows are swept (also runs once at startup).
+    purgeIntervalMs: int(process.env.SNIPPET_PURGE_INTERVAL_MS, 60 * 60 * 1000),
+
+    // Creating a snippet is a write to disk by an anonymous client, so it gets
+    // its own, much stricter budget than running code.
+    rateLimitWindowMs: int(process.env.SNIPPET_RATE_LIMIT_WINDOW_MS, 60 * 60 * 1000),
+    rateLimitMax: int(process.env.SNIPPET_RATE_LIMIT_MAX, 30),
+  },
+
   // Per-IP request limit on /run-code.
   rateLimit: {
     windowMs: int(process.env.RATE_LIMIT_WINDOW_MS, 60 * 1000),

@@ -16,6 +16,9 @@ process.env.MAX_CONCURRENT_EXECUTIONS = "1"
 process.env.MAX_QUEUED_EXECUTIONS = "1"
 process.env.QUEUE_TIMEOUT_MS = "10000"
 process.env.RUN_TIMEOUT_MS = "8000"
+// This suite never touches snippets; leaving the feature on would have it open
+// the default database in parallel with the suites that do. See sandbox.test.js.
+process.env.SNIPPETS_ENABLED = "false"
 
 const { ExecutionGate } = require("../executor/concurrency")
 const app = require("../app")

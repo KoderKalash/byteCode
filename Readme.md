@@ -20,6 +20,7 @@ doesn't build.
 - 🧾 Real compiler and runtime errors, not a generic "failed" message
 - ⏱️ Wall-clock timeouts, memory/CPU/PID caps, and no network inside the sandbox
 - 🚦 Per-IP rate limiting and a global concurrency cap
+- 🔗 Shareable snippet links — code, language and stdin in one URL
 - 🔥 Responsive UI (Tailwind + Next.js)
 
 ---
@@ -178,6 +179,11 @@ Backend (`backend/.env`, see `.env.example`):
 | `MAX_CONCURRENT_EXECUTIONS` | `4` | Containers running at once |
 | `MAX_QUEUED_EXECUTIONS` | `8` | Requests allowed to wait for a slot |
 | `QUEUE_TIMEOUT_MS` | `15000` | How long a queued request waits before `503` |
+| `SNIPPETS_ENABLED` | `true` | `false` turns sharing off; no database is created |
+| `SNIPPET_DB_PATH` | `backend/data/snippets.db` | SQLite file; must be writable in production |
+| `SNIPPET_TTL_DAYS` | `90` | How long a share link lives |
+| `SNIPPET_RATE_LIMIT_MAX` | `30` | Snippets created per window, per IP |
+| `SNIPPET_RATE_LIMIT_WINDOW_MS` | `3600000` | That window (1 hour) |
 
 Frontend (`frontend/.env.local`):
 
@@ -227,13 +233,46 @@ pattern-matching on prose: `run`, `compile`, `invalid`, `rate_limited`,
 | `429` | Per-IP rate limit exceeded |
 | `503` | At capacity (`Retry-After: 5`), or the sandbox itself is unavailable |
 
+### `POST /snippets`
+
+Saves the editor contents and returns a short id. The frontend's Share button
+puts `/?s=<id>` in the address bar and on the clipboard.
+
+```json
+{ "language": "python", "code": "print(input())", "stdin": "42\n" }
+```
+
+```json
+{ "ok": true, "id": "q3TXAAjWvfMd", "expiresAt": 1781234567890 }
+```
+
+### `GET /snippets/:id`
+
+```json
+{ "ok": true, "id": "q3TXAAjWvfMd", "language": "python",
+  "code": "print(input())", "stdin": "42\n",
+  "createdAt": 1773458567890, "expiresAt": 1781234567890 }
+```
+
+`404` if the id is unknown **or expired** — the two are deliberately the same
+answer, so a 410 cannot be used to confirm that an id was once real.
+
+Snippets are stored in SQLite (node's built-in `node:sqlite`, so no extra
+dependency and no separate service). Ids are random, not sequential: they are
+the only thing keeping one person's link from being guessed. They expire after
+`SNIPPET_TTL_DAYS`, and creating one carries its own rate limit, well below the
+run limit — this is storage anonymous clients can write to.
+
+**Links are unlisted, not private:** anyone holding one can read the snippet.
+
 ### `GET /health`
 
 ```json
 {
   "status": "ok",
   "languages": ["python", "cpp", "java"],
-  "executions": { "active": 0, "queued": 0, "max": 4 }
+  "executions": { "active": 0, "queued": 0, "max": 4 },
+  "snippets": true
 }
 ```
 
@@ -318,5 +357,4 @@ must reach the Docker socket, which is root-equivalent on that host.
 
 ## 🗺️ Roadmap
 
-- [ ] Shareable snippet links
 - [ ] A warm container pool to cut cold-start latency

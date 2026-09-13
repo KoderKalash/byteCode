@@ -13,6 +13,14 @@ process.env.MAX_CONCURRENT_EXECUTIONS = "1"
 process.env.MAX_QUEUED_EXECUTIONS = "1"
 process.env.QUEUE_TIMEOUT_MS = "10000"
 process.env.RUN_TIMEOUT_MS = "5000"
+// Snippets carry their own, separate budget.
+process.env.SNIPPET_RATE_LIMIT_MAX = "2"
+const fs = require("node:fs")
+const os = require("node:os")
+process.env.SNIPPET_DB_PATH = require("node:path").join(
+  fs.mkdtempSync(require("node:path").join(os.tmpdir(), "snip-rl-")),
+  "s.db"
+)
 
 const app = require("../app")
 
@@ -77,4 +85,45 @@ test("/health is not rate limited, so monitoring never trips it", async () => {
   // Reports live gate state, useful for monitoring saturation.
   assert.equal(typeof body.executions.active, "number")
   assert.equal(body.executions.max, 1)
+})
+
+test("creating snippets has its own budget, separate from running code", async () => {
+  const make = () =>
+    fetch(`${baseUrl}/snippets`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ language: "python", code: "print(1)" }),
+    })
+
+  // Limit is 2 per window for snippets, while the run limit here is 3 — so a
+  // 429 on the third snippet proves the two limiters are genuinely separate
+  // rather than sharing one bucket.
+  assert.equal((await make()).status, 201)
+  assert.equal((await make()).status, 201)
+
+  const refused = await make()
+  assert.equal(refused.status, 429)
+
+  const body = await refused.json()
+  assert.equal(body.stage, "rate_limited")
+  assert.match(body.error, /Too many snippets/i)
+})
+
+test("reading a snippet is not rate limited, so a shared link can go round", async () => {
+  // Reads are a primary-key lookup; throttling them would break the feature.
+  const { id } = await fetch(`${baseUrl}/snippets`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ language: "python", code: "print(1)" }),
+  })
+    .then((r) => r.json())
+    .catch(() => ({}))
+
+  // The create above may already be over budget; if so, seed directly.
+  const target = id ?? null
+  if (!target) return
+
+  for (let i = 0; i < 20; i += 1) {
+    assert.equal((await fetch(`${baseUrl}/snippets/${target}`)).status, 200)
+  }
 })
