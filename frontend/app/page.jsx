@@ -10,7 +10,7 @@ import InputBox from "@/components/InputBox"
 import ThemeToggle from "@/components/ThemeToggle"
 import { runCode } from "@/utils/api"
 import useIsDark from "@/hooks/useIsDark"
-import languages from "@/constants/languages"
+import languages, { DEFAULT_LANGUAGE } from "@/constants/languages"
 
 const FILENAMES = { python: "main.py", cpp: "main.cpp", java: "Main.java" }
 
@@ -45,7 +45,7 @@ const THEMES = {
 
 export default function Home() {
   const [code, setCode] = useState("")
-  const [language, setLanguage] = useState(languages[0].id)
+  const [language, setLanguage] = useState(DEFAULT_LANGUAGE)
   const [stdin, setStdin] = useState("")
   const [result, setResult] = useState(null)
   const [isRunning, setIsRunning] = useState(false)
