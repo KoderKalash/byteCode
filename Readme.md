@@ -300,6 +300,22 @@ Register it in `backend/executor/language/index.js`, add a
 
 ---
 
+## 🚀 Deploying
+
+The frontend goes to Vercel; the backend needs a VPS, because it starts a Docker
+container per submission and so needs a Docker socket — which Vercel, Netlify and
+most serverless platforms do not provide.
+
+See **[deploy/README.md](deploy/README.md)** for the runbook:
+`deploy/setup-vps.sh` provisions the box, `deploy/bytecode-api.service` runs the
+API, `deploy/nginx.conf` terminates TLS, and `frontend/vercel.json` configures
+the frontend.
+
+Read the security note at the top of that file first: the API's service account
+must reach the Docker socket, which is root-equivalent on that host.
+
+---
+
 ## 🗺️ Roadmap
 
 - [ ] Shareable snippet links
