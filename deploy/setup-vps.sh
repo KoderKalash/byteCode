@@ -81,13 +81,22 @@ fi
 
 cat <<'NEXT'
 
-Remaining, by hand:
+Remaining, by hand. The certificate comes BEFORE the proxy config: nginx.conf
+names certificate files by path, so installing it first leaves nginx unable to
+pass `nginx -t`. See deploy/README.md.
+
+  0. Point an A record for your API domain at this box, and let it resolve.
   1. Edit /etc/bytecode/bytecode.env — set CORS_ORIGINS to your Vercel URL.
      systemctl restart bytecode-api
-  2. Copy deploy/nginx.conf to /etc/nginx/sites-available/bytecode-api,
-     replace api.example.com, symlink into sites-enabled, remove the default site.
-  3. certbot --nginx -d api.example.com
-  4. Firewall: allow 80/443, and do NOT expose 5000.
+  2. Firewall: allow 80/443, and do NOT expose 5000.
      ufw allow OpenSSH && ufw allow 'Nginx Full' && ufw enable
-  5. Set NEXT_PUBLIC_API_URL on Vercel to https://api.example.com and redeploy.
+  3. certbot certonly --webroot -w /var/www/html -d api.example.com
+  4. Install the proxy, now that the certificate exists:
+     sed 's/api\.example\.com/your-domain/g' deploy/nginx.conf \
+       > /etc/nginx/sites-available/bytecode-api
+     ln -sf /etc/nginx/sites-available/bytecode-api /etc/nginx/sites-enabled/
+     rm -f /etc/nginx/sites-enabled/default
+     nginx -t && systemctl reload nginx
+  5. curl https://your-domain/health   (from somewhere other than this box)
+  6. Set NEXT_PUBLIC_API_URL on Vercel to https://your-domain and redeploy.
 NEXT
