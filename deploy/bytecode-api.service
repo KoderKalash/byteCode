@@ -1,0 +1,65 @@
+# ByteCode API — systemd unit.
+#
+# Install to /etc/systemd/system/bytecode-api.service
+#
+# The API is NOT containerised. It shells out to `docker run` per submission,
+# so containerising it would mean handing a container the host's Docker socket,
+# which is strictly worse than running it as an ordinary service.
+
+[Unit]
+Description=ByteCode compiler API
+Documentation=https://github.com/CoderKundu/byteCode-v1.0.0
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=bytecode
+Group=bytecode
+
+# Needed to talk to the Docker socket. NOTE: membership of the `docker` group
+# is equivalent to root on this host — anyone who can reach the socket can
+# start a privileged container. Run this on a box you are willing to rebuild,
+# not alongside anything else you care about.
+SupplementaryGroups=docker
+
+WorkingDirectory=/opt/bytecode/backend
+EnvironmentFile=/etc/bytecode/bytecode.env
+# /usr/bin/env so this works whether node came from NodeSource (/usr/bin/node)
+# or a manual/nvm install (/usr/local/bin/node) — both are on systemd's default
+# PATH. systemd requires the first argument be absolute, which /usr/bin/env is.
+ExecStart=/usr/bin/env node app.js
+
+Restart=on-failure
+RestartSec=5s
+
+# Each request creates a work directory with mkdtemp under os.tmpdir(), which
+# honours TMPDIR, and that directory is then bind-mounted into the sandbox
+# container. The Docker daemon resolves the mount source in the HOST mount
+# namespace, so the path must be one the daemon can actually see. Putting it in
+# the service's StateDirectory keeps it off /tmp and out of any private
+# namespace, which is why this works where a PrivateTmp=true /tmp would not.
+StateDirectory=bytecode
+Environment=TMPDIR=/var/lib/bytecode
+Environment=NODE_ENV=production
+
+# Hardening. Deliberately conservative: anything that virtualises the
+# filesystem risks hiding the bind-mount source from the Docker daemon.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/bytecode
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+
+# Log to the journal: `journalctl -u bytecode-api -f`
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
