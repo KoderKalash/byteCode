@@ -1,19 +1,13 @@
 node_modules/
-
-# Local configuration
 .env
+!.env.example
 
-# Submitted programs and their build products.
-#
-# The executor writes the submission into this directory (process.cwd()) and
-# runs it here, so whatever anyone last ran is left behind on disk. Those files
-# are not source and must not be committed -- backend/main, Main.class,
-# Main.java, main.cpp and main.py were all in the repository because of this.
+# Compiler output — these used to be written straight into this directory.
 main
 main.exe
 main.out
-main.py
-main.cpp
-Main.java
 *.class
 *.o
+
+# SQLite snippet database (generated)
+data/
