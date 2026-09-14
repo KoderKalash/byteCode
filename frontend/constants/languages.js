@@ -6,13 +6,18 @@ export const DEFAULT_LANGUAGE = "python"
 // first-time visitor nothing to press Run on, and a disabled Run button is a
 // poor first impression of a tool whose whole point is running code.
 //
+// None end with a trailing newline: the editor would render that as an extra
+// empty line and count it, so a one-line program would read "2 LINES". The
+// backend writes the submission verbatim and no toolchain here minds a file
+// without a final newline.
+//
 // Deliberately none of these read stdin: the input box starts empty, so a
 // starter that called input() would greet a new visitor with an EOF traceback.
 const languages = [
   {
     id: "python",
     label: "Python",
-    starter: 'print("Hello from ByteCode")\n',
+    starter: 'print("Hello from ByteCode")',
   },
   {
     id: "cpp",
@@ -22,8 +27,7 @@ const languages = [
 int main() {
     std::cout << "Hello from ByteCode\\n";
     return 0;
-}
-`,
+}`,
   },
   {
     id: "java",
@@ -33,8 +37,7 @@ int main() {
     public static void main(String[] args) {
         System.out.println("Hello from ByteCode");
     }
-}
-`,
+}`,
   },
 ]
 

@@ -5,6 +5,14 @@ in an isolated, resource-limited Docker sandbox. Write code in the browser, pick
 a language, and see the output — including real compiler diagnostics when it
 doesn't build.
 
+**[Try it →](https://byte-code-v1-0-0.vercel.app/)**
+
+The editor is live: write code, switch languages, toggle the theme. **Running
+code does not work there yet** — that needs the sandbox backend, which wants a
+Docker socket and so runs on a VPS rather than on Vercel (see
+[Deploying](#-deploying)). Press Run on the live site and it will tell you as
+much rather than hanging.
+
 ![ByteCode Screenshot](./frontend/public/compiler.png)
 
 ---

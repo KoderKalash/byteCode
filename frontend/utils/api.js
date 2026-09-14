@@ -3,6 +3,27 @@
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/$/, "")
 
 /**
+ * What to say when the API cannot be reached at all.
+ *
+ * A deployment built without NEXT_PUBLIC_API_URL falls back to localhost, which
+ * is right for development and meaningless in a stranger's browser: naming
+ * `http://localhost:5000` there reads as a half-wired app rather than a missing
+ * backend. So when the base is loopback but the page is not being served from
+ * loopback, the deployment simply has no backend and says so.
+ */
+function unreachableMessage() {
+  const baseIsLoopback = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(API_BASE)
+  const servedFromLoopback =
+    typeof window !== "undefined" &&
+    /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)
+
+  if (baseIsLoopback && !servedFromLoopback) {
+    return "This deployment has no compiler backend configured, so code cannot be run here."
+  }
+  return `Could not reach the ByteCode API at ${API_BASE}.`
+}
+
+/**
  * Collapse an API response into one of a fixed set of outcomes the UI knows how
  * to render. Every error the API returns carries a `stage`, so this never has to
  * pattern-match on prose.
@@ -38,7 +59,7 @@ export async function runCode({ language, code, stdin }) {
     return {
       ok: false,
       kind: "network",
-      output: `Could not reach the ByteCode API at ${API_BASE}.`,
+      output: unreachableMessage(),
       stdout: "",
       stderr: "",
     }
